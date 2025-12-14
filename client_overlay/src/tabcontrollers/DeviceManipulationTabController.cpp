@@ -603,6 +603,7 @@ namespace motioncompensation
 	{
 		try
 		{
+			//默认情况下使用 ReferenceTracker 模式
 			vrmotioncompensation::MotionCompensationMode NewMode = vrmotioncompensation::MotionCompensationMode::ReferenceTracker;
 
 			// Send new settings to the driver.dll
@@ -807,6 +808,11 @@ namespace motioncompensation
 		emit offsetChanged();
 	}
 
+	/// <summary>
+	/// 增加 RefRotation 偏移量
+	/// </summary>
+	/// <param name="axis"></param>
+	/// <param name="value"></param>
 	void DeviceManipulationTabController::increaseRefRotationOffset(unsigned axis, double value)
 	{
 		_offset.Rotation.v[axis] += value;

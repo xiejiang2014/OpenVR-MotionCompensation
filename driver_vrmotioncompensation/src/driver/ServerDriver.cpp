@@ -34,13 +34,16 @@ namespace vrmotioncompensation
 		bool ServerDriver::hooksTrackedDevicePoseUpdated(void* serverDriverHost, int version,
 			uint32_t& unWhichDevice, vr::DriverPose_t& newPose, uint32_t& unPoseStructSize)
 		{
+			//检查设备ID是否合法
 			if (unWhichDevice >= vr::k_unMaxTrackedDeviceCount)
 				return true;
 
+			// 尝试直接获取这个设备的“处理器”（Handle）
 			auto handle = _openvrIdDeviceManipulationHandle[unWhichDevice];
 
-			if (!handle)
+			if (!handle) //如果 !handle（没找到这个设备的处理器），说明出了意外：设备已经开始汇报数据了，但我们的驱动还没来得及注册它。这时需要“临时抱佛脚”，现场注册。
 			{
+				//静态过滤器 (防止重复尝试): 所有函数调用共享这一份变量。
 				static std::set<uint32_t> attemptedRegistration;
 				static std::mutex registrationMutex;
 
@@ -52,7 +55,8 @@ namespace vrmotioncompensation
 					}
 					attemptedRegistration.insert(unWhichDevice);
 				}
-
+			
+				//上锁与双重检查:
 				std::lock_guard<std::recursive_mutex> lock(_deviceManipulationHandlesMutex);
 
 				handle = _openvrIdDeviceManipulationHandle[unWhichDevice];
@@ -63,6 +67,8 @@ namespace vrmotioncompensation
 					{
 						char serial[1024] = { 0 };
 						vr::ETrackedPropertyError err;
+
+						//现场注册(获取硬件信息) :
 						vr::VRProperties()->GetStringProperty(container, vr::Prop_SerialNumber_String, serial, sizeof(serial), &err);
 
 						if (err == vr::TrackedProp_Success && serial[0] != '\0')
@@ -94,8 +100,10 @@ namespace vrmotioncompensation
 				}
 			}
 
+			//真正的干活 (Pose Update)
 			if (handle && handle->isValid())
 			{
+				//注意这里是传的址, 在 handlePoseUpdate 中修改的 newPose 结果都会在这里生效,进而回传到原本的函数中
 				return handle->handlePoseUpdate(unWhichDevice, newPose, unPoseStructSize);
 			}
 

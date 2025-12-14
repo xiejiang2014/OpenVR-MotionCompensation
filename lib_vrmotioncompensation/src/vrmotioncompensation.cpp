@@ -17,6 +17,7 @@
 
 namespace vrmotioncompensation
 {
+	//接收线程
 // Receives and dispatches ipc messages
 	void VRMotionCompensation::_ipcThreadFunc(VRMotionCompensation* _this)
 	{
@@ -33,13 +34,13 @@ namespace vrmotioncompensation
 				{
 					if (recv_size == sizeof(ipc::Reply))
 					{
-						std::lock_guard<std::recursive_mutex> lock(_this->_mutex);
-						auto i = _this->_ipcPromiseMap.find(message.messageId);
+						std::lock_guard<std::recursive_mutex> lock(_this->_mutex);//互斥锁来保护共享数据
+						auto i = _this->_ipcPromiseMap.find(message.messageId);//找到是谁在等待这条消息
 						if (i != _this->_ipcPromiseMap.end())
 						{
 							if (i->second.isValid)
 							{
-								i->second.promise.set_value(message);
+								i->second.promise.set_value(message);//通知正在等待的主线程数据已到
 							}
 							else
 							{
@@ -487,6 +488,7 @@ namespace vrmotioncompensation
 		}
 	}
 
+	//把 MMFstruct_OVRMC_v1 的数据发送给驱动层
 	void VRMotionCompensation::setOffsets(MMFstruct_OVRMC_v1 offsets)
 	{
 		if (_ipcServerQueue)
@@ -511,10 +513,10 @@ namespace vrmotioncompensation
 				_ipcPromiseMap.insert({ messageId, std::move(respPromise) });
 			}
 
-			//Send message
+			//Send message   发送到驱动程序
 			_ipcServerQueue->send(&message, sizeof(ipc::Request), 0);
 
-			auto resp = respFuture.get();
+			auto resp = respFuture.get();  // 阻塞等待回复
 			{
 				std::lock_guard<std::recursive_mutex> lock(_mutex);
 				_ipcPromiseMap.erase(messageId);

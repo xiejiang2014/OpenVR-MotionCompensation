@@ -4,28 +4,35 @@
 #include <utility>
 #include <chrono>
 
+//确保通信双方使用相同的协议版本，避免数据解析错误。
 #define IPC_PROTOCOL_VERSION 3
 
 namespace vrmotioncompensation
 {
 	namespace ipc
 	{
+		// 消息类型
 		enum class RequestType : uint32_t
 		{
 			None,
 
-			// IPC connection handling
+			// IPC connection handling 基础的连接管理和心跳检测。
 			IPC_ClientConnect,
 			IPC_ClientDisconnect,
 			IPC_Ping,
+
+			// 获取设备信息、设置运动补偿模式、设置滤波参数、重置零位、设置偏移量等。
 			DeviceManipulation_GetDeviceInfo,
 			DeviceManipulation_MotionCompensationMode,
 			DeviceManipulation_SetMotionCompensationProperties,
 			DeviceManipulation_ResetRefZeroPose,
 			DeviceManipulation_SetOffsets,
+
+			// 控制调试日志。
 			DebugLogger_Settings,
 		};
 
+		// 定义服务端给客户端的回应类型。
 		enum class ReplyType : uint32_t
 		{
 			None,
@@ -35,22 +42,24 @@ namespace vrmotioncompensation
 			DeviceManipulation_GetDeviceInfo
 		};
 
+		// 状态码
 		enum class ReplyStatus : uint32_t
 		{
 			None,
 			Ok,
 			UnknownError,
-			InvalidId,
+			InvalidId,				//ID无效
 			AlreadyInUse,
 			InvalidType,
 			NotFound,
-			SharedMemoryError,
+			SharedMemoryError,		//共享内存错误
 			InvalidVersion,
 			MissingProperty,
 			InvalidOperation,
-			NotTracking
+			NotTracking				//未追踪
 		};
 
+		// 握手请求，包含协议版本和队列名称
 		struct Request_IPC_ClientConnect
 		{
 			uint32_t messageId;
@@ -84,22 +93,23 @@ namespace vrmotioncompensation
 			uint32_t OpenVRId;
 		};
 
+
 		struct Request_DeviceManipulation_MotionCompensationMode
 		{
 			uint32_t clientId;
 			uint32_t messageId;			// Used to associate with Reply
-			uint32_t MCdeviceId;		// Motion compensated device ID
-			uint32_t RTdeviceId;		// Reference tracker device ID
-			MotionCompensationMode CompensationMode;
+			uint32_t MCdeviceId;		// Motion compensated device ID  哪个设备需要被补偿（通常是头显）。
+			uint32_t RTdeviceId;		// Reference tracker device ID   哪个设备是参考追踪器（固定在动感座椅上的追踪器）
+			MotionCompensationMode CompensationMode;			//使用哪种补偿算法。
 		};
 
 		struct Request_DeviceManipulation_SetMotionCompensationProperties
 		{
 			uint32_t clientId;
 			uint32_t messageId;			// Used to associate with Reply
-			double LPFBeta;
+			double LPFBeta;				//低通滤波器参数（用于平滑数据，减少抖动）。
 			uint32_t samples;
-			bool setZero;
+			bool setZero;				//是否归零
 			//MMFstruct_v1 offsets;
 		};
 
@@ -109,6 +119,7 @@ namespace vrmotioncompensation
 			uint32_t messageId;			// Used to associate with Reply
 		};
 
+		// 设置物理偏移量（比如追踪器安装位置和实际座椅中心的距离）。
 		struct Request_DeviceManipulation_SetOffsets
 		{
 			uint32_t clientId;
@@ -143,8 +154,8 @@ namespace vrmotioncompensation
 			}
 
 			RequestType type = RequestType::None;
-			int64_t timestamp = 0; // milliseconds since epoch
-			union MsgUnion
+			int64_t timestamp = 0; // milliseconds since epoch  时间戳
+			union MsgUnion  //这是一个共用体，意味着一段内存空间可以根据 type 被解释为上述任何一种 Request_... 结构体。
 			{
 				Request_IPC_ClientConnect ipc_ClientConnect;
 				Request_IPC_ClientDisconnect ipc_ClientDisconnect;
@@ -195,9 +206,9 @@ namespace vrmotioncompensation
 
 			ReplyType type = ReplyType::None;
 			uint64_t timestamp = 0; // milliseconds since epoch
-			uint32_t messageId;
-			ReplyStatus status;
-			union MsgUnion
+			uint32_t messageId;  //用于将回复和请求对应起来
+			ReplyStatus status; // 成功 / 失败）
+			union MsgUnion  //存放具体的回复数据
 			{
 				Reply_IPC_ClientConnect ipc_ClientConnect;
 				Reply_IPC_Ping ipc_Ping;

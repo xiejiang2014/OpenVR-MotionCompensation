@@ -119,8 +119,8 @@
     <OutDir>$(SolutionDir)\$(ProjectName)\bin\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)build\$(ProjectName)\$(Configuration)\$(Platform)\</IntDir>
     <TargetName>driver_00vrmotioncompensation</TargetName>
-    <IncludePath>D:\Programmierung\VR\boost_1_89_0\boost;$(IncludePath)</IncludePath>
-    <LibraryPath>D:\Programmierung\VR\boost_1_89_0\stage\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>F:\DemoProjects\OpenVR-MotionCompensation\lib_vrmotioncompensation\include;E:\tools\boost_1_89_0;$(IncludePath)</IncludePath>
+    <LibraryPath>E:\tools\boost_1_89_0\stage\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -133,8 +133,8 @@
     <OutDir>$(SolutionDir)\$(ProjectName)\bin\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)build\$(ProjectName)\$(Configuration)\$(Platform)\</IntDir>
     <TargetName>driver_00vrmotioncompensation</TargetName>
-    <IncludePath>..\third-party\boost_1_89_0;$(IncludePath)</IncludePath>
-    <LibraryPath>..\third-party\boost_1_89_0\stage\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>E:\tools\boost_1_89_0;$(IncludePath)</IncludePath>
+    <LibraryPath>E:\tools\boost_1_89_0\stage\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
