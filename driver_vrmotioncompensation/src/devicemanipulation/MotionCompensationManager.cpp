@@ -463,78 +463,40 @@ namespace vrmotioncompensation
 
 		void MotionCompensationManager::updatePoseFromPlatform()
 		{
+			// [检查 1] 空指针与数据有效性
+			if (!_Poffset) return;
 
-			//空指针检查：防止共享内存未连接时崩溃
-			if (!_Poffset) {
-				return;
-			}
-
-			// [修复2] 创建数据快照 (Atomic Snapshot)
-			// 将共享内存的数据一次性拷贝到栈内存中。
-			// 之后所有操作都读取 localData，防止读到一半数据被外部程序修改。
+			// [快照] 读取共享内存
 			MMFstruct_OVRMC_v1 localData = *_Poffset;
 
-			if (localData.dataIndex <= 0) {
+			// 数据无效
+			if (localData.dataIndex <= 0) return;
 
-				return;
-			}
+			// 计算 Index 差值
+			long long indexDiff = (long long)localData.dataIndex - _lastDataIndex;
 
-			if(localData.dataIndex >0 && localData.dataIndex != _lastDataIndex && localData.dataIndex%100 == 0)
+			// 1. 如果 indexDiff == 0: 数据没变，维持上一帧状态，直接返回
+			if (indexDiff == 0 && _lastDataIndex != 0)
 			{
-				LOG(INFO) << "updatePoseFromPlatform    index:" << localData.dataIndex << "  x:" << localData.Translation.v[0] << "  y : " << localData.Translation.v[1] << "  z : " << localData.Translation.v[2]<< "  w : " << localData.QRotation.w << "  x : " << localData.QRotation.x << "  y : " << localData.QRotation.y << "  z : " << localData.QRotation.z;
-			}
-
-			// 1. 检查数据是否更新 (利用 DataIndex)
-			// 即使数据没更新，如果是在 applyMotionCompensation 每一帧都调用，
-			// 我们可能需要根据时间差做插值，或者简单地保持上一帧数据。
-			// 这里假设 100Hz 足够快，且我们只在数据变动时计算新的物理属性。
-
-			// 获取当前时间
-			long long now = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-
-			// 仅当由新数据到来时才进行复杂的微分计算
-			// 注意：如果是同一个 DataIndex，速度和加速度应该衰减或者保持，这里为了简化，我们假设每次调用都是新的或者处理逻辑足够快
-
-			bool isNewData = (localData.dataIndex != _lastDataIndex);
-			if (!isNewData && _lastDataIndex != 0)
-			{
-				// [优化] 如果没新数据，最好把速度归零，防止 SteamVR 错误预测
-				_RefVelLock.lock();
-				_RefVel = { 0, 0, 0 };
-				_RefAcc = { 0, 0, 0 };
-				_RefRotVel = { 0, 0, 0 };
-				_RefRotAcc = { 0, 0, 0 };
-				_RefVelLock.unlock();
-
 				_RefPoseValid = true;
 				_ZeroPoseValid = true;
 				return;
 			}
 
-			// 计算时间差 (秒)
-			double tdiff = (double)(now - _lastPlatformTime) / 1.0E6;
-			if (tdiff <= 0.000001) tdiff = 0.01; // 防止除以0，默认给10ms (100Hz)
-
-
-
 			// -----------------------------------------------------------
-			// 2. 提取位置 (Position)
-			// 你的定义: X右(+), Y升(+), Z后(+) -> 这完全符合 OpenVR/OpenGL 的右手坐标系标准
+			// 2. 提取并清洗数据 (无论是否复位，都需要提取位置和旋转)
+			// -----------------------------------------------------------
+
 			vr::HmdVector3d_t rawPos;
 			rawPos.v[0] = localData.Translation.v[0];
 			rawPos.v[1] = localData.Translation.v[1];
 			rawPos.v[2] = localData.Translation.v[2];
 
-			// 3. 提取旋转 (Rotation)
 			vr::HmdQuaternion_t rawRot;
-			// 检查是否全为0
+
 			if (localData.QRotation.w == 0 && localData.QRotation.x == 0 && localData.QRotation.y == 0 && localData.QRotation.z == 0)
 			{
-				// 默认为无旋转 (Identity)
-				rawRot.w = 1.0;
-				rawRot.x = 0.0;
-				rawRot.y = 0.0;
-				rawRot.z = 0.0;
+				rawRot = { 1.0, 0.0, 0.0, 0.0 };
 			}
 			else
 			{
@@ -542,107 +504,129 @@ namespace vrmotioncompensation
 				rawRot.x = localData.QRotation.x;
 				rawRot.y = localData.QRotation.y;
 				rawRot.z = localData.QRotation.z;
+
+				// [保持] 归一化四元数
+				double mag = sqrt(rawRot.w * rawRot.w + rawRot.x * rawRot.x + rawRot.y * rawRot.y + rawRot.z * rawRot.z);
+				if (mag > 0.00001) {
+					rawRot.w /= mag; rawRot.x /= mag; rawRot.y /= mag; rawRot.z /= mag;
+				}
+			}
+
+			// [保持] 四元数连续性检查
+			// 如果是复位情况(indexDiff < 0)，其实不需要做连续性检查，
+			// 但为了代码简洁，且 rawRot 翻转不影响单帧姿态，保留此处也无妨。
+			if (_lastDataIndex != 0)
+			{
+				double dot = rawRot.w * _lastPlatformRot.w + rawRot.x * _lastPlatformRot.x +
+					rawRot.y * _lastPlatformRot.y + rawRot.z * _lastPlatformRot.z;
+
+				if (dot < 0)
+				{
+					rawRot.w = -rawRot.w;
+					rawRot.x = -rawRot.x;
+					rawRot.y = -rawRot.y;
+					rawRot.z = -rawRot.z;
+				}
 			}
 
 			// -----------------------------------------------------------
-			// 4. 计算物理属性 (速度 Velocity & 加速度 Acceleration)
-			// 即使平台数据很稳，计算出来的速度也需要计算，因为SteamVR预测需要它
+			// 3. 计算物理属性 (速度 & 加速度)
+			// 初始化为 0。如果发生复位(indexDiff < 0)，则不会进入下面的计算块，保持为 0。
+			// -----------------------------------------------------------
 
 			vr::HmdVector3d_t currVel = { 0, 0, 0 };
 			vr::HmdVector3d_t currAcc = { 0, 0, 0 };
 			vr::HmdVector3d_t currAngVel = { 0, 0, 0 };
 			vr::HmdVector3d_t currAngAcc = { 0, 0, 0 };
 
-			if (_lastDataIndex != 0) // 必须有上一帧才能算速度
+			// 仅当 数据是递增的 (indexDiff > 0) 且 不是第一帧 (_lastDataIndex != 0) 时计算物理属性
+			if (indexDiff > 0 && _lastDataIndex != 0)
 			{
-				// 线速度 V = (P_new - P_old) / t
-				currVel.v[0] = (rawPos.v[0] - _lastPlatformPos.v[0]) / tdiff;
-				currVel.v[1] = (rawPos.v[1] - _lastPlatformPos.v[1]) / tdiff;
-				currVel.v[2] = (rawPos.v[2] - _lastPlatformPos.v[2]) / tdiff;
+				// 使用 DataIndex 计算精确时间差 (100Hz = 0.01秒)
+				double tdiff = (double)indexDiff * 0.01;
+				// 防御性检查
+				if (tdiff < 0.00001) tdiff = 0.01;
 
-				// 线加速度 A = (V_new - V_old) / t
-				currAcc.v[0] = (currVel.v[0] - _lastPlatformVel.v[0]) / tdiff;
-				currAcc.v[1] = (currVel.v[1] - _lastPlatformVel.v[1]) / tdiff;
-				currAcc.v[2] = (currVel.v[2] - _lastPlatformVel.v[2]) / tdiff;
+				// [保持] 位置死区 (消除静止抖动)
+				double distSq =
+					pow(rawPos.v[0] - _lastPlatformPos.v[0], 2) +
+					pow(rawPos.v[1] - _lastPlatformPos.v[1], 2) +
+					pow(rawPos.v[2] - _lastPlatformPos.v[2], 2);
 
-				// 角速度 (简化算法，假设变化较小)
-				// 也可以复用原来代码里的 rotVelocity 函数
-				vr::HmdVector3d_t eulerNow = toEulerAngles(rawRot);
-				vr::HmdVector3d_t eulerOld = toEulerAngles(_lastPlatformRot);
+				// 死区阈值：0.0001米 (0.1mm)
+				if (distSq > 1.0e-8)
+				{
+					currVel.v[0] = (rawPos.v[0] - _lastPlatformPos.v[0]) / tdiff;
+					currVel.v[1] = (rawPos.v[1] - _lastPlatformPos.v[1]) / tdiff;
+					currVel.v[2] = (rawPos.v[2] - _lastPlatformPos.v[2]) / tdiff;
 
-				currAngVel.v[0] = rotVelocity(tdiff, eulerNow.v[0], eulerOld.v[0]);
-				currAngVel.v[1] = rotVelocity(tdiff, eulerNow.v[1], eulerOld.v[1]);
-				currAngVel.v[2] = rotVelocity(tdiff, eulerNow.v[2], eulerOld.v[2]);
+					currAcc.v[0] = (currVel.v[0] - _lastPlatformVel.v[0]) / tdiff;
+					currAcc.v[1] = (currVel.v[1] - _lastPlatformVel.v[1]) / tdiff;
+					currAcc.v[2] = (currVel.v[2] - _lastPlatformVel.v[2]) / tdiff;
+				}
 
-				// 角加速度
-				currAngAcc.v[0] = (currAngVel.v[0] - _lastPlatformAngVel.v[0]) / tdiff;
-				currAngAcc.v[1] = (currAngVel.v[1] - _lastPlatformAngVel.v[1]) / tdiff;
-				currAngAcc.v[2] = (currAngVel.v[2] - _lastPlatformAngVel.v[2]) / tdiff;
+				// [保持] 旋转死区
+				double rotDiffSq =
+					pow(rawRot.w - _lastPlatformRot.w, 2) +
+					pow(rawRot.x - _lastPlatformRot.x, 2) +
+					pow(rawRot.y - _lastPlatformRot.y, 2) +
+					pow(rawRot.z - _lastPlatformRot.z, 2);
+
+				if (rotDiffSq > 1.0e-8)
+				{
+					vr::HmdVector3d_t eulerNow = toEulerAngles(rawRot);
+					vr::HmdVector3d_t eulerOld = toEulerAngles(_lastPlatformRot);
+
+					currAngVel.v[0] = rotVelocity(tdiff, eulerNow.v[0], eulerOld.v[0]);
+					currAngVel.v[1] = rotVelocity(tdiff, eulerNow.v[1], eulerOld.v[1]);
+					currAngVel.v[2] = rotVelocity(tdiff, eulerNow.v[2], eulerOld.v[2]);
+
+					currAngAcc.v[0] = (currAngVel.v[0] - _lastPlatformAngVel.v[0]) / tdiff;
+					currAngAcc.v[1] = (currAngVel.v[1] - _lastPlatformAngVel.v[1]) / tdiff;
+					currAngAcc.v[2] = (currAngVel.v[2] - _lastPlatformAngVel.v[2]) / tdiff;
+				}
 			}
+			// else { // 这里隐含处理了 indexDiff < 0 的情况：
+				 // 变量 currVel 等保持初始化时的 {0,0,0}，
+				 // 实现了“复位时不计算疯狂的速度”这一目标。
+			// }
 
 			// -----------------------------------------------------------
-			// 5. 更新 _Ref 变量 (供 applyMotionCompensation 使用)
-			// 这里最关键：我们需要把平台数据视为“App Space”下的数据
-
-			_RefLock.lock(); // 加锁保护
+			// 4. 更新 _Ref 变量 (线程安全)
+			// -----------------------------------------------------------
+			_RefLock.lock();
 			_ZeroLock.lock();
 			_RefVelLock.lock();
 
-			// 强制初始化 Zero 数据 (防止未校准导致全是0)
-			_ZeroPos.v[0] = 0.0;
-			_ZeroPos.v[1] = 0.0;
-			_ZeroPos.v[2] = 0.0;
-
-			_ZeroRot.w = 1.0; // 重要！w必须是1
-			_ZeroRot.x = 0.0;
-			_ZeroRot.y = 0.0;
-			_ZeroRot.z = 0.0;
-
-			// 强制标记 Zero 有效，否则 applyMotionCompensation 会直接跳过计算
+			// 强制初始化 Zero
+			_ZeroPos = { 0, 0, 0 };
+			_ZeroRot = { 1, 0, 0, 0 };
 			_ZeroPoseValid = true;
 
-			// A. 设置参考位置 _RefPos
-			// 如果你有归零逻辑(_SetZeroMode)，需要减去归零时的 offset。
-			// 假设 _ZeroPos 是由 VR 房间校准决定的，而平台发来的是相对 0 点的移动。
-			// 通常情况下，_RefPos 直接等于平台发来的 rawPos 即可 (因为平台 0 就是物理 0)
-			// 但为了保持原有逻辑的兼容性，我们假设 _ZeroPos 对应平台的 (0,0,0)
-
-			// 这里的 _RefPos 代表 "动感座椅当前在世界坐标系中的位置"
+			// 设置参考数据 (无论是否复位，当前位置都是准确的)
 			_RefPos = rawPos;
-
-			// B. 设置参考旋转 _RefRot 和 _RefRotInv
-			// 原理：_RefRot = 当前旋转 * 归零旋转的逆
-			// 如果平台归零时是 Identity (0,0,0)，那 _RefRot 就是 rawRot
-
-			// 计算相对于归零姿态的旋转差
 			_RefRot = rawRot * vrmath::quaternionConjugate(_ZeroRot);
-
-			// 计算逆 (最重要的一步，用于抵消)
 			_RefRotInv = vrmath::quaternionConjugate(_RefRot);
 
-			_ZeroLock.unlock();
-
-			// C. 设置速度和加速度 (无需坐标转换，因为 rawPos 已经是 App Space 定义的)
-			// 原来的代码有 _RefVelLock，我们也用上
+			// 设置物理数据 (如果是复位，这里全是 0，符合预期)
 			_RefVel = currVel;
 			_RefAcc = currAcc;
 			_RefRotVel = currAngVel;
 			_RefRotAcc = currAngAcc;
+
 			_RefVelLock.unlock();
 			_ZeroLock.unlock();
 			_RefLock.unlock();
 
 			// -----------------------------------------------------------
-			// 6. 更新缓存和标志位
-
+			// 5. 更新缓存
+			// -----------------------------------------------------------
 			_lastDataIndex = localData.dataIndex;
-			_lastPlatformTime = now;
 			_lastPlatformPos = rawPos;
 			_lastPlatformVel = currVel;
 			_lastPlatformRot = rawRot;
 			_lastPlatformAngVel = currAngVel;
 
-			// 强制设为有效，因为这是平台硬数据，不需要像追踪器那样预热100帧
 			_RefPoseValid = true;
 		}
 
