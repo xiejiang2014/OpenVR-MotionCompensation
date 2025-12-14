@@ -556,13 +556,16 @@ namespace vrmotioncompensation
 				// 死区阈值：0.0001米 (0.1mm)
 				if (distSq > 1.0e-8)
 				{
-					currVel.v[0] = (rawPos.v[0] - _lastPlatformPos.v[0]) / tdiff;
-					currVel.v[1] = (rawPos.v[1] - _lastPlatformPos.v[1]) / tdiff;
-					currVel.v[2] = (rawPos.v[2] - _lastPlatformPos.v[2]) / tdiff;
+					currVel = { 0, 0, 0 }; // <--- 强制为 0
+					currAcc = { 0, 0, 0 };
 
-					currAcc.v[0] = (currVel.v[0] - _lastPlatformVel.v[0]) / tdiff;
-					currAcc.v[1] = (currVel.v[1] - _lastPlatformVel.v[1]) / tdiff;
-					currAcc.v[2] = (currVel.v[2] - _lastPlatformVel.v[2]) / tdiff;
+					//currVel.v[0] = (rawPos.v[0] - _lastPlatformPos.v[0]) / tdiff;
+					//currVel.v[1] = (rawPos.v[1] - _lastPlatformPos.v[1]) / tdiff;
+					//currVel.v[2] = (rawPos.v[2] - _lastPlatformPos.v[2]) / tdiff;
+
+					//currAcc.v[0] = (currVel.v[0] - _lastPlatformVel.v[0]) / tdiff;
+					//currAcc.v[1] = (currVel.v[1] - _lastPlatformVel.v[1]) / tdiff;
+					//currAcc.v[2] = (currVel.v[2] - _lastPlatformVel.v[2]) / tdiff;
 				}
 
 				// [保持] 旋转死区
@@ -577,13 +580,16 @@ namespace vrmotioncompensation
 					vr::HmdVector3d_t eulerNow = toEulerAngles(rawRot);
 					vr::HmdVector3d_t eulerOld = toEulerAngles(_lastPlatformRot);
 
-					currAngVel.v[0] = rotVelocity(tdiff, eulerNow.v[0], eulerOld.v[0]);
-					currAngVel.v[1] = rotVelocity(tdiff, eulerNow.v[1], eulerOld.v[1]);
-					currAngVel.v[2] = rotVelocity(tdiff, eulerNow.v[2], eulerOld.v[2]);
+					currAngVel = { 0, 0, 0 }; // <--- 强制为 0
+					currAngAcc = { 0, 0, 0 };
 
-					currAngAcc.v[0] = (currAngVel.v[0] - _lastPlatformAngVel.v[0]) / tdiff;
-					currAngAcc.v[1] = (currAngVel.v[1] - _lastPlatformAngVel.v[1]) / tdiff;
-					currAngAcc.v[2] = (currAngVel.v[2] - _lastPlatformAngVel.v[2]) / tdiff;
+					//currAngVel.v[0] = rotVelocity(tdiff, eulerNow.v[0], eulerOld.v[0]);
+					//currAngVel.v[1] = rotVelocity(tdiff, eulerNow.v[1], eulerOld.v[1]);
+					//currAngVel.v[2] = rotVelocity(tdiff, eulerNow.v[2], eulerOld.v[2]);
+
+					//currAngAcc.v[0] = (currAngVel.v[0] - _lastPlatformAngVel.v[0]) / tdiff;
+					//currAngAcc.v[1] = (currAngVel.v[1] - _lastPlatformAngVel.v[1]) / tdiff;
+					//currAngAcc.v[2] = (currAngVel.v[2] - _lastPlatformAngVel.v[2]) / tdiff;
 				}
 			}
 			// else { // 这里隐含处理了 indexDiff < 0 的情况：
