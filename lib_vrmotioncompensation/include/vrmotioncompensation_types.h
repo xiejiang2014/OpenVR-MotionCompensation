@@ -36,7 +36,8 @@ namespace vrmotioncompensation
 		uint32_t Flags_1;
 		uint32_t Flags_2;
 		double Reserved_double[10];
-		int Reserved_int[10];
+		uint32_t dataIndex;
+		int Reserved_int[9];
 
 		MMFstruct_OVRMC_v1()
 		{
