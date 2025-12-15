@@ -41,6 +41,8 @@ namespace vrmotioncompensation
 				_RefPoseValid = false;
 				_RefPoseValidCounter = 0;
 				_ZeroPoseValid = false;
+
+				LOG(INFO) << "setMotionCompensationMode	_ZeroPoseValid->false";
 				_Enabled = true;
 
 				setAlpha(_Samples);
@@ -67,6 +69,7 @@ namespace vrmotioncompensation
 			_RtDeviceID = RTdevice;
 			_RefPoseValid = false;
 			_ZeroPoseValid = false;
+			LOG(INFO) << "setNewReferenceTracker	_ZeroPoseValid->false";
 		}
 
 		void MotionCompensationManager::setAlpha(uint32_t samples)
@@ -101,6 +104,7 @@ namespace vrmotioncompensation
 		void MotionCompensationManager::resetZeroPose()
 		{
 			_ZeroPoseValid = false;
+			LOG(INFO) << "resetZeroPose	_ZeroPoseValid->false";
 		}
 
 		void MotionCompensationManager::setZeroPose(const vr::DriverPose_t& pose)
@@ -108,12 +112,18 @@ namespace vrmotioncompensation
 			// convert pose from driver space to app space
 			vr::HmdQuaternion_t tmpConj = vrmath::quaternionConjugate(pose.qWorldFromDriverRotation);
 
+
 			// Save zero points
 			_ZeroLock.lock();
 			_ZeroPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, pose.vecPosition, false) + pose.vecWorldFromDriverTranslation;
 			_ZeroRot = pose.qWorldFromDriverRotation * pose.qRotation;
-
 			_ZeroPoseValid = true;
+
+
+			LOG(INFO) << "setZeroPose	_ZeroPoseValid->true";
+			LOG(INFO) << "setZeroPose	Pos:	"<< _ZeroPos.v[0] << "	" << _ZeroPos.v[1] << "	" << _ZeroPos.v[2];
+			LOG(INFO) << "setZeroPose	Rot:	" << _ZeroRot.w << "	" << _ZeroRot.x << "	" << _ZeroRot.y << "	" << _ZeroRot.z;
+
 			_ZeroLock.unlock();
 		}
 
