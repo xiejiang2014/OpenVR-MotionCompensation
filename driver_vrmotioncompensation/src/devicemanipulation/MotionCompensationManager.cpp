@@ -174,10 +174,7 @@ namespace vrmotioncompensation
 		/// <param name="pose"></param>
 		void MotionCompensationManager::updateRefPose(const vr::DriverPose_t& pose)
 		{
-
-
-
-			//return; //禁用此函数
+			return; //禁用此函数
 
 			// From https://github.com/ValveSoftware/driver_hydra/blob/master/drivers/driver_hydra/driver_hydra.cpp Line 835:
 			// "True acceleration is highly volatile, so it's not really reasonable to
@@ -377,7 +374,7 @@ namespace vrmotioncompensation
 		/// <returns></returns>
 		bool MotionCompensationManager::applyMotionCompensation(vr::DriverPose_t& pose)
 		{
-			return true; 
+			//return true; 
 
 			if (_Enabled) // 只有在开启补偿时才计算
 			{
@@ -654,6 +651,17 @@ namespace vrmotioncompensation
 			_lastPlatformAngVel = currAngVel;
 
 			_RefPoseValid = true;
+
+			if (_PlatformPoseIndex % 100 == 0)
+			{
+				vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
+
+				double radToDeg = 180.0 / M_PI;
+
+				LOG(INFO) << "PlatformPose _RefRot	|" << q.v[0] * radToDeg << "|" << q.v[1] * radToDeg << "|" << q.v[2] * radToDeg;
+			}
+
+			_PlatformPoseIndex++;
 		}
 
 		void MotionCompensationManager::runFrame()
