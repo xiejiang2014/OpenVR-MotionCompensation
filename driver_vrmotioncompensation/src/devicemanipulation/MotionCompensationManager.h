@@ -259,6 +259,7 @@ namespace vrmotioncompensation
 
 			int _TrackerPoseIndex = 0;
 			int _PlatformPoseIndex = 0;
+			int _MotionPoseIndex = 0;
 
 			// 在 MotionCompensationManager.h 中添加以下私有变量
 			uint32_t _lastDataIndex = 0;

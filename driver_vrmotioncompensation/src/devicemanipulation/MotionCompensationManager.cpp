@@ -405,6 +405,19 @@ namespace vrmotioncompensation
 
 				// Do motion compensation
 				vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * pose.qRotation;
+
+
+				if (_MotionPoseIndex % 100 == 0)
+				{
+					vr::HmdVector3d_t q = QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
+
+					double radToDeg = 180.0 / M_PI;
+
+					LOG(INFO) << "MotionPose poseWorldRot	|" << q.v[0] * radToDeg << "|" << q.v[1] * radToDeg << "|" << q.v[2] * radToDeg;
+				}
+				_MotionPoseIndex++;
+
+
 				_RefLock.lock();
 				_ZeroLock.lock();
 
@@ -652,16 +665,16 @@ namespace vrmotioncompensation
 
 			_RefPoseValid = true;
 
-			if (_PlatformPoseIndex % 100 == 0)
-			{
-				vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
+			//if (_PlatformPoseIndex % 100 == 0)
+			//{
+			//	vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
 
-				double radToDeg = 180.0 / M_PI;
+			//	double radToDeg = 180.0 / M_PI;
 
-				LOG(INFO) << "PlatformPose _RefRot	|" << q.v[0] * radToDeg << "|" << q.v[1] * radToDeg << "|" << q.v[2] * radToDeg;
-			}
+			//	LOG(INFO) << "PlatformPose _RefRot	|" << q.v[0] * radToDeg << "|" << q.v[1] * radToDeg << "|" << q.v[2] * radToDeg;
+			//}
 
-			_PlatformPoseIndex++;
+			//_PlatformPoseIndex++;
 		}
 
 		void MotionCompensationManager::runFrame()
