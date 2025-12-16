@@ -257,6 +257,7 @@ namespace vrmotioncompensation
 			bool _RefPoseValid = false;
 			int _RefPoseValidCounter = 0;
 
+			int _TrackerPoseIndex = 0;
 
 			// 在 MotionCompensationManager.h 中添加以下私有变量
 			uint32_t _lastDataIndex = 0;
@@ -267,6 +268,8 @@ namespace vrmotioncompensation
 			vr::HmdVector3d_t _lastPlatformVel = { 0, 0, 0 };
 			vr::HmdQuaternion_t _lastPlatformRot = { 1, 0, 0, 0 }; // w=1, Identity
 			vr::HmdVector3d_t _lastPlatformAngVel = { 0, 0, 0 };
+
+			vr::HmdVector3d_t QuaternionToEulerOpenVR(double w, double x, double y, double z);
 		};
 	}
 }

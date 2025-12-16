@@ -13,6 +13,11 @@ namespace vrmotioncompensation
 {
 	namespace driver
 	{
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 		MotionCompensationManager::MotionCompensationManager(ServerDriver* parent) : m_parent(parent)
 		{
 			try
@@ -169,7 +174,10 @@ namespace vrmotioncompensation
 		/// <param name="pose"></param>
 		void MotionCompensationManager::updateRefPose(const vr::DriverPose_t& pose)
 		{
-			return; //禁用此函数
+
+
+
+			//return; //禁用此函数
 
 			// From https://github.com/ValveSoftware/driver_hydra/blob/master/drivers/driver_hydra/driver_hydra.cpp Line 835:
 			// "True acceleration is highly volatile, so it's not really reasonable to
@@ -348,6 +356,18 @@ namespace vrmotioncompensation
 			// Save last rotation and pose
 			_RotEulerFilterOld = RotEulerFilter;
 			_RefTrackerLastPose = pose;
+
+
+			if (_TrackerPoseIndex % 100 == 0)
+			{
+				vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
+
+				double radToDeg = 180.0 / M_PI;
+
+				LOG(INFO) << "Track _RefRot	|" << q.v[0]* radToDeg << "|" << q.v[1] * radToDeg << "|" << q.v[2] * radToDeg;
+			}
+
+			_TrackerPoseIndex++;
 		}
 
 		/// <summary>
@@ -357,7 +377,7 @@ namespace vrmotioncompensation
 		/// <returns></returns>
 		bool MotionCompensationManager::applyMotionCompensation(vr::DriverPose_t& pose)
 		{
-			//return true; 
+			return true; 
 
 			if (_Enabled) // 只有在开启补偿时才计算
 			{
@@ -792,6 +812,38 @@ namespace vrmotioncompensation
 			double siny_cosp = 2 * (q.w * q.z + q.x * q.y);
 			double cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z);
 			angles.v[2] = std::atan2(siny_cosp, cosy_cosp);
+
+			return angles;
+		}
+
+
+
+		// 专门针对 OpenVR/SteamVR 的 (Qy * Qx * Qz) 顺序进行逆运算
+		// 实测有效
+		vr::HmdVector3d_t MotionCompensationManager::QuaternionToEulerOpenVR(double w, double x, double y, double z) {
+			vr::HmdVector3d_t angles;
+
+			// 1. 计算 Pitch (X-axis) - 这是 Y-X-Z 顺序下的中间轴
+			// 公式核心: 2(w*x - y*z)
+			double sinp = 2.0 * (w * x - y * z);
+
+			// 防止数值误差导致 asin 越界 (NaN)
+			if (std::abs(sinp) >= 1.0)
+				angles.v[0] = std::copysign(M_PI / 2.0, sinp); // 90度锁定
+			else
+				angles.v[0] = std::asin(sinp);
+
+			// 2. 计算 Yaw (Y-axis)
+			// 公式核心: atan2(2(w*y + x*z), 1 - 2(x^2 + y^2))
+			double siny_cosp = 2.0 * (w * y + x * z);
+			double cosy_cosp = 1.0 - 2.0 * (x * x + y * y);
+			angles.v[2] = std::atan2(siny_cosp, cosy_cosp);
+
+			// 3. 计算 Roll (Z-axis)
+			// 公式核心: atan2(2(w*z + x*y), 1 - 2(x^2 + z^2))
+			double sinr_cosp = 2.0 * (w * z + x * y);
+			double cosr_cosp = 1.0 - 2.0 * (x * x + z * z);
+			angles.v[1] = std::atan2(sinr_cosp, cosr_cosp);
 
 			return angles;
 		}
