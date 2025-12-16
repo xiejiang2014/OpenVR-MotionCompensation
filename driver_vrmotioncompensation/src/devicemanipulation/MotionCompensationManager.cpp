@@ -107,6 +107,10 @@ namespace vrmotioncompensation
 			LOG(INFO) << "resetZeroPose	_ZeroPoseValid->false";
 		}
 
+		/// <summary>
+		/// 
+		/// </summary>
+		/// <param name="pose">track的原始pose值</param>
 		void MotionCompensationManager::setZeroPose(const vr::DriverPose_t& pose)
 		{
 			// convert pose from driver space to app space
