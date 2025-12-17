@@ -265,6 +265,13 @@ namespace vrmotioncompensation
 			uint32_t _lastDataIndex = 0;
 			long long _lastPlatformTime = 0; // 上一次收到平台数据的时间(微秒)
 
+
+			vr::HmdQuaternion_t _zeroMotionRot = { 0, 0, 0 };
+			vr::HmdQuaternion_t _zeroMotionRotYawOnly = { 0, 0, 0 };
+			vr::HmdQuaternion_t _zeroMotionRotYawOnlyInv = { 0, 0, 0 };
+			double _zeroMotionYaw = 0;
+			bool _zeroMotionRotValid = false;
+
 			// 用于计算速度和加速度的“上一帧”缓存
 			vr::HmdVector3d_t _lastPlatformPos = { 0, 0, 0 };
 			vr::HmdVector3d_t _lastPlatformVel = { 0, 0, 0 };
@@ -272,6 +279,10 @@ namespace vrmotioncompensation
 			vr::HmdVector3d_t _lastPlatformAngVel = { 0, 0, 0 };
 
 			vr::HmdVector3d_t QuaternionToEulerOpenVR(double w, double x, double y, double z);
+
+			std::vector<float> _rrp = { 0, 0, 0, 0, 0, 0 };
+			std::vector<float> CoordinateTransform(const std::vector<float>& pos_original, const std::vector<float>& RRP);
+			std::vector<float> ProjectRotationVector(const std::vector<float>& pos_original, const std::vector<float>& rrp);
 		};
 	}
 }

@@ -18,6 +18,13 @@ namespace vrmotioncompensation
 #define M_PI 3.14159265358979323846
 #endif
 
+
+
+
+		const float DegToRad = M_PI / 180.0f;
+		const float RadToDeg = 180.0f / M_PI;
+
+
 		MotionCompensationManager::MotionCompensationManager(ServerDriver* parent) : m_parent(parent)
 		{
 			try
@@ -359,9 +366,7 @@ namespace vrmotioncompensation
 			{
 				vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
 
-				double radToDeg = 180.0 / M_PI;
-
-				LOG(INFO) << "Track _RefRot	|" << q.v[0]* radToDeg << "|" << q.v[1] * radToDeg << "|" << q.v[2] * radToDeg;
+				LOG(INFO) << "Track _RefRot	|" << q.v[0]* RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg;
 			}
 
 			_TrackerPoseIndex++;
@@ -374,25 +379,7 @@ namespace vrmotioncompensation
 		/// <returns></returns>
 		bool MotionCompensationManager::applyMotionCompensation(vr::DriverPose_t& pose)
 		{
-			//return true; 
-
-			if (_Enabled) // 只有在开启补偿时才计算
-			{
-
-				try
-				{
-					updatePoseFromPlatform();
-				}
-				catch (std::exception& e)
-				{
-					LOG(ERROR) << "updatePoseFromPlatform error  " << e.what();
-				}
-
-			}
-
-			//return true;
-
-			if (_Enabled && _ZeroPoseValid && _RefPoseValid)//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
+			if (_Enabled)//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
 			{
 				// All filter calculations are done within the function for the reference tracker, because the HMD position is updated 3x more often.
 				// Convert pose from driver space to app space
@@ -407,15 +394,33 @@ namespace vrmotioncompensation
 				vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * pose.qRotation;
 
 
-				if (_MotionPoseIndex % 100 == 0)
+				//////if (_MotionPoseIndex % 100 == 0)
+				//////{
+				//////	vr::HmdVector3d_t q = QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
+				//////	LOG(INFO) << "MotionPose poseWorldRot	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg;
+				//////}
+				//////_MotionPoseIndex++;
+
+
+				if (!_zeroMotionRotValid)
 				{
-					vr::HmdVector3d_t q = QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
-
-					double radToDeg = 180.0 / M_PI;
-
-					LOG(INFO) << "MotionPose poseWorldRot	|" << q.v[0] * radToDeg << "|" << q.v[1] * radToDeg << "|" << q.v[2] * radToDeg;
+					_zeroMotionRot = poseWorldRot;
+					vr::HmdVector3d_t q =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
+					_zeroMotionYaw = q.v[2];
+					_zeroMotionRotYawOnly = vrmath::quaternionFromYawPitchRoll(_zeroMotionYaw,0,0);
+					_zeroMotionRotYawOnlyInv = vrmath::quaternionConjugate(_zeroMotionRotYawOnly);
+					_zeroMotionRotValid = true;
 				}
-				_MotionPoseIndex++;
+
+
+				try
+				{
+					updatePoseFromPlatform();
+				}
+				catch (std::exception& e)
+				{
+					LOG(ERROR) << "updatePoseFromPlatform error  " << e.what();
+				}
 
 
 				_RefLock.lock();
@@ -433,7 +438,7 @@ namespace vrmotioncompensation
 				_ZeroLock.unlock();
 
 				//应用旋转补偿 直接把座椅旋转的逆 (_RefRotInv) 乘到头显旋转上。这实现了“去耦合”。
-				vr::HmdQuaternion_t compensatedPoseWorldRot = _RefRotInv * poseWorldRot;
+				vr::HmdQuaternion_t compensatedPoseWorldRot = _RefRotInv *  poseWorldRot;
 				_RefLock.unlock();
 
 				// Translate the motion ref Velocity / Acceleration values into driver space and directly subtract them
@@ -478,15 +483,23 @@ namespace vrmotioncompensation
 					//	结果 : 告诉 SteamVR “虽然我的传感器说我在动，但实际上我在虚拟世界里没动（或者动得没那么快）”。
 				}
 
+				//应用旋转补偿
+				pose.qRotation = tmpConj * compensatedPoseWorldRot;
 
 				// convert back to driver space
 				// 转换回驱动坐标系 (App Space -> Driver Space):
 				// SteamVR 只要 Driver Space 的数据，所以算完还得转回去。
 				//	关键点 : 这里直接修改了参数 pose 的成员变量。
-				pose.qRotation = tmpConj * compensatedPoseWorldRot;
 				vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, true);
 				_copyVec(pose.vecPosition, adjPoseDriverPos.v);
 			}
+
+
+			if (!_Enabled) 
+			{
+				_zeroMotionRotValid = false;
+			}
+
 			return true;
 		}
 
@@ -513,27 +526,65 @@ namespace vrmotioncompensation
 				return;
 			}
 
-			// -----------------------------------------------------------
-			// 2. 提取并清洗数据 (无论是否复位，都需要提取位置和旋转)
-			// -----------------------------------------------------------
 
+			double pitch = localData.Rotation.v[0];
+			double roll  = localData.Rotation.v[1];
+			double yaw   = localData.Rotation.v[2];
+			double Sway  = localData.Translation.v[0];
+			double Heave = localData.Translation.v[1];
+			double Surge = localData.Translation.v[2];
+
+
+			//旋转到头显的指向
+			std::vector<float> pos_original = { (float)pitch,(float)roll,(float)yaw, (float)Sway, (float)Surge, (float)Heave };
+			_rrp[2] = (float)(0 -_zeroMotionYaw* RadToDeg);
+			std::vector<float> POSInRRP = ProjectRotationVector(pos_original, _rrp);
+
+			//todo 临时屏蔽
+			POSInRRP= { (float)pitch,(float)roll,(float)yaw, (float)Sway, (float)Surge, (float)Heave };
+
+			//if (_PlatformPoseIndex % 10 == 0)
+			//{
+			//	LOG(INFO) << "姿态转向测试	|" << pitch << "|" << roll << "|" << yaw << "|" << _rrp[2] << "|" << POSInRRP[0] << "|" << POSInRRP[1] << "|" << POSInRRP[2];
+			//}
+			//_PlatformPoseIndex++;
+
+
+			//单位换算  正负转换
+			float pitchInRRP = POSInRRP[0] * DegToRad;		//Pitch
+			float rollInRRP  = -POSInRRP[1] * DegToRad;	//Roll
+			float yawInRRP   = POSInRRP[2] * DegToRad;		//Yaw
+
+			POSInRRP[3] = POSInRRP[3] / 1000;			//Sway
+			POSInRRP[4] = -POSInRRP[4] / 1000;		//Surge
+			POSInRRP[5] = POSInRRP[5] / 1000;			//Heave
+
+
+			//----------------------------------------平移量
 			vr::HmdVector3d_t rawPos;
-			rawPos.v[0] = localData.Translation.v[0];
-			rawPos.v[1] = localData.Translation.v[1];
-			rawPos.v[2] = localData.Translation.v[2];
+			rawPos.v[0] = POSInRRP[3];
+			rawPos.v[1] = POSInRRP[5];
+			rawPos.v[2] = POSInRRP[4];
 
+			//----------------------------------------旋转量
 			vr::HmdQuaternion_t rawRot;
 
-			if (localData.QRotation.w == 0 && localData.QRotation.x == 0 && localData.QRotation.y == 0 && localData.QRotation.z == 0)
+			//得到旋转后的旋转四元数
+			vr::HmdQuaternion_t  qRotation = vrmath::quaternionFromYawPitchRoll(yawInRRP, pitchInRRP, rollInRRP);
+
+			// -----------2提取并清洗数据 (无论是否复位，都需要提取位置和旋转)
+
+
+			if (qRotation.w == 0 && qRotation.x == 0 && qRotation.y == 0 && qRotation.z == 0)
 			{
 				rawRot = { 1.0, 0.0, 0.0, 0.0 };
 			}
 			else
 			{
-				rawRot.w = localData.QRotation.w;
-				rawRot.x = localData.QRotation.x;
-				rawRot.y = localData.QRotation.y;
-				rawRot.z = localData.QRotation.z;
+				rawRot.w = qRotation.w;
+				rawRot.x = qRotation.x;
+				rawRot.y = qRotation.y;
+				rawRot.z = qRotation.z;
 
 				// [保持] 归一化四元数
 				double mag = sqrt(rawRot.w * rawRot.w + rawRot.x * rawRot.x + rawRot.y * rawRot.y + rawRot.z * rawRot.z);
@@ -559,11 +610,7 @@ namespace vrmotioncompensation
 				}
 			}
 
-			// -----------------------------------------------------------
-			// 3. 计算物理属性 (速度 & 加速度)
-			// 初始化为 0。如果发生复位(indexDiff < 0)，则不会进入下面的计算块，保持为 0。
-			// -----------------------------------------------------------
-
+			// -----------3计算物理属性 (速度 & 加速度)	初始化为 0。如果发生复位(indexDiff < 0)，则不会进入下面的计算块，保持为 0。
 			vr::HmdVector3d_t currVel = { 0, 0, 0 };
 			vr::HmdVector3d_t currAcc = { 0, 0, 0 };
 			vr::HmdVector3d_t currAngVel = { 0, 0, 0 };
@@ -627,9 +674,7 @@ namespace vrmotioncompensation
 				 // 实现了“复位时不计算疯狂的速度”这一目标。
 			// }
 
-			// -----------------------------------------------------------
-			// 4. 更新 _Ref 变量 (线程安全)
-			// -----------------------------------------------------------
+			// -----------4. 更新 _Ref 变量 (线程安全)
 			_RefLock.lock();
 			_ZeroLock.lock();
 			_RefVelLock.lock();
@@ -654,9 +699,7 @@ namespace vrmotioncompensation
 			_ZeroLock.unlock();
 			_RefLock.unlock();
 
-			// -----------------------------------------------------------
-			// 5. 更新缓存
-			// -----------------------------------------------------------
+			// -----------5. 更新缓存
 			_lastDataIndex = localData.dataIndex;
 			_lastPlatformPos = rawPos;
 			_lastPlatformVel = currVel;
@@ -665,16 +708,14 @@ namespace vrmotioncompensation
 
 			_RefPoseValid = true;
 
-			//if (_PlatformPoseIndex % 100 == 0)
-			//{
-			//	vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
+			if (_PlatformPoseIndex % 10 == 0)
+			{
+				vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
 
-			//	double radToDeg = 180.0 / M_PI;
-
-			//	LOG(INFO) << "PlatformPose _RefRot	|" << q.v[0] * radToDeg << "|" << q.v[1] * radToDeg << "|" << q.v[2] * radToDeg;
-			//}
-
-			//_PlatformPoseIndex++;
+				LOG(INFO) << "PlatformPose _RefRot	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|" << pitch << "|" << roll << "|" << yaw << "|" << _rrp[2] << "|" << POSInRRP[0] << "|" << POSInRRP[1] << "|" << POSInRRP[2];
+				//LOG(INFO) << "PlatformPose _RefRot	|" << pitch << "|" << roll << "|" << yaw << "|" << 0-_zeroMotionYaw * RadToDeg << "|" << poseInRRP[0] << "|" << poseInRRP[1] << "|" << poseInRRP[2];
+			}
+			_PlatformPoseIndex++;
 		}
 
 		void MotionCompensationManager::runFrame()
@@ -927,6 +968,240 @@ namespace vrmotioncompensation
 				(_n7 + _n12) * (point.v[0] - centerOfRotation.v[0]) + (1.0 - (_n4 + _n6)) * (point.v[1] - centerOfRotation.v[1]) + (_n9 - _n10) * (point.v[2] - centerOfRotation.v[2]) + centerOfRotation.v[1] + translation.v[1],
 				(_n8 - _n11) * (point.v[0] - centerOfRotation.v[0]) + (_n9 + _n10) * (point.v[1] - centerOfRotation.v[1]) + (1.0 - (_n4 + _n5)) * (point.v[2] - centerOfRotation.v[2]) + centerOfRotation.v[2] + translation.v[2]
 			};
+		}
+
+
+		//-------------------复刻c#中的矩阵旋转
+		// 矩阵乘法 (A * B)
+		vr::HmdMatrix44_t MatrixMultiply(const vr::HmdMatrix44_t& A, const vr::HmdMatrix44_t& B)
+		{
+			vr::HmdMatrix44_t R;
+			for (int i = 0; i < 4; i++)
+			{
+				for (int j = 0; j < 4; j++)
+				{
+					R.m[i][j] = 
+						A.m[i][0] * B.m[0][j] +
+						A.m[i][1] * B.m[1][j] +
+						A.m[i][2] * B.m[2][j] +
+						A.m[i][3] * B.m[3][j];
+				}
+			}
+			return R;
+		}
+
+
+		/// <summary>
+		/// 刚体变换矩阵求逆 (优化算法)
+		/// </summary>
+		/// <param name="In"></param>
+		/// <returns></returns>
+		vr::HmdMatrix44_t MatrixInvertRigidBody(const vr::HmdMatrix44_t& In)
+		{
+			vr::HmdMatrix44_t Out;
+
+			// 1. 转置旋转部分 (R^T)
+			// Out_ij = In_ji
+			Out.m[0][0] = In.m[0][0]; Out.m[0][1] = In.m[1][0]; Out.m[0][2] = In.m[2][0];
+			Out.m[1][0] = In.m[0][1]; Out.m[1][1] = In.m[1][1]; Out.m[1][2] = In.m[2][1];
+			Out.m[2][0] = In.m[0][2]; Out.m[2][1] = In.m[1][2]; Out.m[2][2] = In.m[2][2];
+
+			// 2. 计算新的平移部分 (-R^T * t)
+			// 公式: T_new = - (Transpose(R) * T_old)
+			// 这相当于点积：T_new.x = -(R_Col0 . T_old)
+
+			float tx = In.m[0][3];
+			float ty = In.m[1][3];
+			float tz = In.m[2][3];
+
+			// 修正后的计算逻辑：
+			// X分量 = -( In.m[0][0]*tx + In.m[1][0]*ty + In.m[2][0]*tz )
+			Out.m[0][3] = -(In.m[0][0] * tx + In.m[1][0] * ty + In.m[2][0] * tz);
+
+			// Y分量 = -( In.m[0][1]*tx + In.m[1][1]*ty + In.m[2][1]*tz )
+			Out.m[1][3] = -(In.m[0][1] * tx + In.m[1][1] * ty + In.m[2][1] * tz);
+
+			// Z分量 = -( In.m[0][2]*tx + In.m[1][2]*ty + In.m[2][2]*tz )
+			Out.m[2][3] = -(In.m[0][2] * tx + In.m[1][2] * ty + In.m[2][2] * tz);
+
+			// 3. 填充最后一行
+			Out.m[3][0] = 0.0f;
+			Out.m[3][1] = 0.0f;
+			Out.m[3][2] = 0.0f;
+			Out.m[3][3] = 1.0f;
+
+			return Out;
+		}
+
+
+		// 根据欧拉角(弧度)和平移创建变换矩阵
+		// 对应 C# 中的 CreateTransformMatrix
+		vr::HmdMatrix44_t CreateTransformMatrix(float txRad, float tyRad, float tzRad, float px, float py, float pz)
+		{
+			vr::HmdMatrix44_t mat;
+
+			float cosTZ = std::cos(tzRad), sinTZ = std::sin(tzRad);
+			float cosTY = std::cos(tyRad), sinTY = std::sin(tyRad);
+			float cosTX = std::cos(txRad), sinTX = std::sin(txRad);
+
+			// Row 0
+			mat.m[0][0] = cosTZ * cosTY;
+			mat.m[0][1] = cosTZ * sinTY * sinTX - sinTZ * cosTX;
+			mat.m[0][2] = cosTZ * sinTY * cosTX + sinTZ * sinTX;
+			mat.m[0][3] = px; // Translation X
+
+			// Row 1
+			mat.m[1][0] = sinTZ * cosTY;
+			mat.m[1][1] = sinTZ * sinTY * sinTX + cosTZ * cosTX;
+			mat.m[1][2] = sinTZ * sinTY * cosTX - cosTZ * sinTX;
+			mat.m[1][3] = py; // Translation Y
+
+			// Row 2
+			mat.m[2][0] = -sinTY;
+			mat.m[2][1] = cosTY * sinTX;
+			mat.m[2][2] = cosTY * cosTX;
+			mat.m[2][3] = pz; // Translation Z
+
+			// Row 3
+			mat.m[3][0] = 0.0f;
+			mat.m[3][1] = 0.0f;
+			mat.m[3][2] = 0.0f;
+			mat.m[3][3] = 1.0f;
+
+			return mat;
+		}
+
+
+		/**
+		 * 计算 RRP 参考坐标系下姿态值
+		 * @param pos_original 原始位姿数组 [Rx, Ry, Rz, Px, Py, Pz]
+		 * @param RRP 参考坐标系数组 [Rx, Ry, Rz, Px, Py, Pz]
+		 * @return 变换后的位姿数组
+		 */
+		std::vector<float> MotionCompensationManager:: CoordinateTransform(const std::vector<float>& pos_original, const std::vector<float>& RRP)
+		{
+			// 1. 构建原始位姿矩阵
+			vr::HmdMatrix44_t T_original = CreateTransformMatrix(
+				pos_original[0] * DegToRad,
+				pos_original[1] * DegToRad,
+				pos_original[2] * DegToRad,
+				pos_original[3],
+				pos_original[4],
+				pos_original[5]
+			);
+
+			// 2. 构建参考坐标系矩阵
+			vr::HmdMatrix44_t T_rrp = CreateTransformMatrix(
+				RRP[0] * DegToRad,
+				RRP[1] * DegToRad,
+				RRP[2] * DegToRad,
+				RRP[3],
+				RRP[4],
+				RRP[5]
+			);
+
+			// 3. 计算 T_rrp 的逆矩阵
+			vr::HmdMatrix44_t T_rrp_inv = MatrixInvertRigidBody(T_rrp);
+
+			// 4. 计算相对变换: T = T_rrp_inv * T_original * T_rrp
+			// 注意乘法顺序 (A*B)*C
+			vr::HmdMatrix44_t Temp = MatrixMultiply(T_rrp_inv, T_original);
+			vr::HmdMatrix44_t T = MatrixMultiply(Temp, T_rrp);
+
+			// 5. 提取新欧拉角 (ZYX 顺序)
+			// C# T.M32 -> C++ m[2][1]
+			// C# T.M33 -> C++ m[2][2]
+			float rx = std::atan2(T.m[2][1], T.m[2][2]); // Pitch
+
+			// Y旋转 (Roll): atan2(-M31, sqrt(M32^2 + M33^2))
+			float ry = std::atan2(-T.m[2][0], std::sqrt(T.m[2][1] * T.m[2][1] + T.m[2][2] * T.m[2][2]));
+
+			// Z旋转 (Yaw): atan2(M21, M11)
+			float rz = std::atan2(T.m[1][0], T.m[0][0]);
+
+			// 6. 返回结果
+			return {
+				rx * RadToDeg,
+				ry * RadToDeg,
+				rz * RadToDeg,
+				T.m[0][3], // Px
+				T.m[1][3], // Py
+				T.m[2][3]  // Pz
+			};
+		}
+		//-------------------
+
+
+
+	/**
+	 * @brief 旋转向量投影 (ProjectRotationVector)
+	 * 将 pos_original 的旋转值视为矢量，投影到 RRP 坐标系下。
+	 *
+	 * @param pos_original 原始姿态及位置 [rx, ry, rz, x, y, z] (角度制)
+	 * @param rrp 参考坐标系姿态及位置 [rx, ry, rz, x, y, z] (角度制)
+	 * @return std::vector<float> 投影后的分量 [rx', ry', rz', x, y, z]
+	 */
+		std::vector<float>MotionCompensationManager::ProjectRotationVector(const std::vector<float>& pos_original, const std::vector<float>& rrp)
+		{
+			// 创建返回结果，大小为6
+			std::vector<float> result(6);
+
+			// 1. 预计算三角函数值
+			// RRP 的旋转角度转弧度
+			float radDeg = static_cast<float>(M_PI) / 180.0f;
+			float rrpX = rrp[0] * radDeg;
+			float rrpY = rrp[1] * radDeg;
+			float rrpZ = rrp[2] * radDeg;
+
+			float cx = std::cos(rrpX);
+			float sx = std::sin(rrpX);
+			float cy = std::cos(rrpY);
+			float sy = std::sin(rrpY);
+			float cz = std::cos(rrpZ);
+			float sz = std::sin(rrpZ);
+
+			// 2. 构建旋转矩阵 R (Matrix 3x3)
+			// 对应 Z-Y-X 顺规： R = Rz * Ry * Rx
+			// m00 m01 m02
+			// m10 m11 m12
+			// m20 m21 m22
+
+			float m00 = cz * cy;
+			float m01 = cz * sy * sx - sz * cx;
+			float m02 = cz * sy * cx + sz * sx;
+
+			float m10 = sz * cy;
+			float m11 = sz * sy * sx + cz * cx;
+			float m12 = sz * sy * cx - cz * sx;
+
+			float m20 = -sy;
+			float m21 = cy * sx;
+			float m22 = cy * cx;
+
+			// 3. 计算投影
+			// 输入矢量 V (将前三个角度视为矢量)
+			float vx = pos_original[0];
+			float vy = pos_original[1];
+			float vz = pos_original[2];
+
+			// 公式：V_local = R_inverse * V_global
+			// 对于旋转矩阵，逆矩阵等于转置矩阵 (R^-1 = R^T)
+			// 所以我们用 R 的转置来乘以 V
+			//
+			// | m00 m10 m20 |   | vx |
+			// | m01 m11 m21 | x | vy |
+			// | m02 m12 m22 |   | vz |
+
+			result[0] = m00 * vx + m10 * vy + m20 * vz; // New Pitch (rx)
+			result[1] = m01 * vx + m11 * vy + m21 * vz; // New Roll (ry)
+			result[2] = m02 * vx + m12 * vy + m22 * vz; // New Yaw (rz)
+
+			// 4. 位置部分直接透传
+			result[3] = pos_original[3];
+			result[4] = pos_original[4];
+			result[5] = pos_original[5];
+
+			return result;
 		}
 	}
 }
