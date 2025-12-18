@@ -124,9 +124,9 @@ namespace vrmotioncompensation
 			_ZeroPoseValid = true;
 
 
-			LOG(INFO) << "setZeroPose	_ZeroPoseValid->true";
-			LOG(INFO) << "setZeroPose	Pos:	"<< _ZeroPos.v[0] << "	" << _ZeroPos.v[1] << "	" << _ZeroPos.v[2];
-			LOG(INFO) << "setZeroPose	Rot:	" << _ZeroRot.w << "	" << _ZeroRot.x << "	" << _ZeroRot.y << "	" << _ZeroRot.z;
+			LOG(INFO) << "设置零姿态	_ZeroPoseValid->true";
+			LOG(INFO) << "设置零姿态	Pos:	"<< _ZeroPos.v[0] << "	" << _ZeroPos.v[1] << "	" << _ZeroPos.v[2];
+			LOG(INFO) << "设置零姿态	Rot:	" << _ZeroRot.w << "	" << _ZeroRot.x << "	" << _ZeroRot.y << "	" << _ZeroRot.z;
 
 			_ZeroLock.unlock();
 		}
