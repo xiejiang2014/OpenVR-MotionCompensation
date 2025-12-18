@@ -181,7 +181,7 @@ namespace vrmotioncompensation
 		/// <param name="pose"></param>
 		void MotionCompensationManager::updateRefPose(const vr::DriverPose_t& pose)
 		{
-			return; //禁用此函数
+			//return; //禁用此函数
 
 			// From https://github.com/ValveSoftware/driver_hydra/blob/master/drivers/driver_hydra/driver_hydra.cpp Line 835:
 			// "True acceleration is highly volatile, so it's not really reasonable to
@@ -362,11 +362,12 @@ namespace vrmotioncompensation
 			_RefTrackerLastPose = pose;
 
 
-			if (_TrackerPoseIndex % 100 == 0)
+			if (_TrackerPoseIndex % 10 == 0)
 			{
 				vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
+				vr::HmdVector3d_t qi = QuaternionToEulerOpenVR(_RefRotInv.w, _RefRotInv.x, _RefRotInv.y, _RefRotInv.z);
 
-				LOG(INFO) << "Track _RefRot	|" << q.v[0]* RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg;
+				LOG(INFO) << "跟踪器补偿	|" << q.v[0]* RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|" << qi.v[0] * RadToDeg << "|" << qi.v[1] * RadToDeg << "|" << qi.v[2] * RadToDeg;
 			}
 
 			_TrackerPoseIndex++;
@@ -394,19 +395,17 @@ namespace vrmotioncompensation
 				vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * pose.qRotation;
 
 
-				//////if (_MotionPoseIndex % 100 == 0)
-				//////{
-				//////	vr::HmdVector3d_t q = QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
-				//////	LOG(INFO) << "MotionPose poseWorldRot	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg;
-				//////}
-				//////_MotionPoseIndex++;
 
+				vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
+				if (_MotionPoseIndex % 100 == 0)
+				{					
+					//LOG(INFO) << "头显航向	|" << headerQ.v[2] * RadToDeg;
+				}
 
 				if (!_zeroMotionRotValid)
 				{
 					_zeroMotionRot = poseWorldRot;
-					vr::HmdVector3d_t q =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
-					_zeroMotionYaw = q.v[2];
+					_zeroMotionYaw = headerQ.v[2];
 					_zeroMotionRotYawOnly = vrmath::quaternionFromYawPitchRoll(_zeroMotionYaw,0,0);
 					_zeroMotionRotYawOnlyInv = vrmath::quaternionConjugate(_zeroMotionRotYawOnly);
 					_zeroMotionRotValid = true;
@@ -439,59 +438,70 @@ namespace vrmotioncompensation
 
 				//应用旋转补偿 直接把座椅旋转的逆 (_RefRotInv) 乘到头显旋转上。这实现了“去耦合”。
 				vr::HmdQuaternion_t compensatedPoseWorldRot = _RefRotInv *  poseWorldRot;
+
 				_RefLock.unlock();
 
-				// Translate the motion ref Velocity / Acceleration values into driver space and directly subtract them
-				//处理速度和加速度:
-				if (_SetZeroMode)
-				{
-					_zeroVec(pose.vecVelocity);
-					_zeroVec(pose.vecAcceleration);
-					_zeroVec(pose.vecAngularVelocity);
-					_zeroVec(pose.vecAngularAcceleration);
-				}
-				else
-				{
-					// Translate the motion ref Velocity / Acceleration values into driver space and directly subtract them
-					_RefVelLock.lock();
-					vr::HmdVector3d_t tmpPosVel = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefVel, true);
-					// 直接减去参考追踪器的速度
-					pose.vecVelocity[0] -= tmpPosVel.v[0];
-					pose.vecVelocity[1] -= tmpPosVel.v[1];
-					pose.vecVelocity[2] -= tmpPosVel.v[2];
+				////////////////// Translate the motion ref Velocity / Acceleration values into driver space and directly subtract them
+				//////////////////处理速度和加速度:
+				////////////////if (_SetZeroMode)
+				////////////////{
+				////////////////	_zeroVec(pose.vecVelocity);
+				////////////////	_zeroVec(pose.vecAcceleration);
+				////////////////	_zeroVec(pose.vecAngularVelocity);
+				////////////////	_zeroVec(pose.vecAngularAcceleration);
+				////////////////}
+				////////////////else
+				////////////////{
+				////////////////	// Translate the motion ref Velocity / Acceleration values into driver space and directly subtract them
+				////////////////	_RefVelLock.lock();
+				////////////////	vr::HmdVector3d_t tmpPosVel = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefVel, true);
+				////////////////	// 直接减去参考追踪器的速度
+				////////////////	pose.vecVelocity[0] -= tmpPosVel.v[0];
+				////////////////	pose.vecVelocity[1] -= tmpPosVel.v[1];
+				////////////////	pose.vecVelocity[2] -= tmpPosVel.v[2];
 
-					vr::HmdVector3d_t tmpRotVel = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefRotVel, true);
-					pose.vecAngularVelocity[0] -= tmpRotVel.v[0];
-					pose.vecAngularVelocity[1] -= tmpRotVel.v[1];
-					pose.vecAngularVelocity[2] -= tmpRotVel.v[2];
+				////////////////	vr::HmdVector3d_t tmpRotVel = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefRotVel, true);
+				////////////////	pose.vecAngularVelocity[0] -= tmpRotVel.v[0];
+				////////////////	pose.vecAngularVelocity[1] -= tmpRotVel.v[1];
+				////////////////	pose.vecAngularVelocity[2] -= tmpRotVel.v[2];
 
-					vr::HmdVector3d_t tmpPosAcc = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefAcc, true);
-					pose.vecAcceleration[0] -= tmpPosAcc.v[0];
-					pose.vecAcceleration[1] -= tmpPosAcc.v[1];
-					pose.vecAcceleration[2] -= tmpPosAcc.v[2];
+				////////////////	vr::HmdVector3d_t tmpPosAcc = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefAcc, true);
+				////////////////	pose.vecAcceleration[0] -= tmpPosAcc.v[0];
+				////////////////	pose.vecAcceleration[1] -= tmpPosAcc.v[1];
+				////////////////	pose.vecAcceleration[2] -= tmpPosAcc.v[2];
 
-					vr::HmdVector3d_t tmpRotAcc = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefRotAcc, true);
-					pose.vecAngularAcceleration[0] -= tmpRotAcc.v[0];
-					pose.vecAngularAcceleration[1] -= tmpRotAcc.v[1];
-					pose.vecAngularAcceleration[2] -= tmpRotAcc.v[2];
-					_RefVelLock.unlock();
+				////////////////	vr::HmdVector3d_t tmpRotAcc = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefRotAcc, true);
+				////////////////	pose.vecAngularAcceleration[0] -= tmpRotAcc.v[0];
+				////////////////	pose.vecAngularAcceleration[1] -= tmpRotAcc.v[1];
+				////////////////	pose.vecAngularAcceleration[2] -= tmpRotAcc.v[2];
+				////////////////	_RefVelLock.unlock();
 
 
-					//这部分非常重要！
-					//	如果只改位置不改速度，SteamVR 的预测算法会发疯，导致画面抖动。
-					//	代码计算了参考追踪器（座椅）的速度，并将其转换到 Driver Space，然后直接从头显的速度中减去。
-					//	结果 : 告诉 SteamVR “虽然我的传感器说我在动，但实际上我在虚拟世界里没动（或者动得没那么快）”。
-				}
+				////////////////	//这部分非常重要！
+				////////////////	//	如果只改位置不改速度，SteamVR 的预测算法会发疯，导致画面抖动。
+				////////////////	//	代码计算了参考追踪器（座椅）的速度，并将其转换到 Driver Space，然后直接从头显的速度中减去。
+				////////////////	//	结果 : 告诉 SteamVR “虽然我的传感器说我在动，但实际上我在虚拟世界里没动（或者动得没那么快）”。
+				////////////////}
 
+				//	-------------关键点 : 这里直接修改了参数 pose 的成员变量。
 				//应用旋转补偿
 				pose.qRotation = tmpConj * compensatedPoseWorldRot;
+
+
+				if (_MotionPoseIndex % 100 == 0)
+				{
+					vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
+					vr::HmdVector3d_t qi = QuaternionToEulerOpenVR(_RefRotInv.w, _RefRotInv.x, _RefRotInv.y, _RefRotInv.z);
+					LOG(INFO) << "MotionPose 应用补偿 	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|"  << qi.v[0] * RadToDeg << "|" << qi.v[1] * RadToDeg << "|" << qi.v[2] * RadToDeg;
+				}
+
 
 				// convert back to driver space
 				// 转换回驱动坐标系 (App Space -> Driver Space):
 				// SteamVR 只要 Driver Space 的数据，所以算完还得转回去。
-				//	关键点 : 这里直接修改了参数 pose 的成员变量。
 				vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, true);
 				_copyVec(pose.vecPosition, adjPoseDriverPos.v);
+				_MotionPoseIndex++;
 			}
 
 
@@ -506,6 +516,8 @@ namespace vrmotioncompensation
 
 		void MotionCompensationManager::updatePoseFromPlatform()
 		{
+			return;
+
 			// [检查 1] 空指针与数据有效性
 			if (!_Poffset) return;
 
@@ -571,6 +583,14 @@ namespace vrmotioncompensation
 
 			//得到旋转后的旋转四元数
 			vr::HmdQuaternion_t  qRotation = vrmath::quaternionFromYawPitchRoll(yawInRRP, pitchInRRP, rollInRRP);
+
+			//if (_PlatformPoseIndex % 10 == 0)
+			//{
+			//	vr::HmdVector3d_t eulerAngles= QuaternionToEulerOpenVR(qRotation.w, qRotation.x, qRotation.y, qRotation.z);
+			//	LOG(INFO) << "四元数转换测试	|" << yawInRRP << "|" << pitchInRRP << "|" << rollInRRP << "|"  << eulerAngles.v[2] << "|" << eulerAngles.v[1] << "|" << eulerAngles.v[1];
+			//}
+			//_PlatformPoseIndex++;
+			
 
 			// -----------2提取并清洗数据 (无论是否复位，都需要提取位置和旋转)
 
@@ -712,8 +732,18 @@ namespace vrmotioncompensation
 			{
 				vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
 
-				LOG(INFO) << "PlatformPose _RefRot	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|" << pitch << "|" << roll << "|" << yaw << "|" << _rrp[2] << "|" << POSInRRP[0] << "|" << POSInRRP[1] << "|" << POSInRRP[2];
+				//LOG(INFO) << "平台补偿结果	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|" << pitch << "|" << roll << "|" << yaw << "|" << _rrp[2] << "|" << POSInRRP[0] << "|" << POSInRRP[1] << "|" << POSInRRP[2];
 				//LOG(INFO) << "PlatformPose _RefRot	|" << pitch << "|" << roll << "|" << yaw << "|" << 0-_zeroMotionYaw * RadToDeg << "|" << poseInRRP[0] << "|" << poseInRRP[1] << "|" << poseInRRP[2];
+			
+			
+
+
+				//LOG(INFO) << "正四元|" << _RefRot.w << "|" << _RefRot.x << "|" << _RefRot.y << "|" << _RefRot.z ;
+				//LOG(INFO) << "逆四元|" << _RefRotInv.w << "|" << _RefRotInv.x << "|" << _RefRotInv.y << "|" << _RefRotInv.z;
+				//vr::HmdVector3d_t q2 = QuaternionToEulerOpenVR(_RefRotInv.w, _RefRotInv.x, _RefRotInv.y, _RefRotInv.z);
+				//LOG(INFO) << "正逆检查(弧度)|" << q.v[0]  << "|" << q.v[1]  << "|" << q.v[2]  << "|" << q2.v[0]  << "|" << q2.v[1]  << "|" << q2.v[2] ;
+				//LOG(INFO) << "正逆检查(角度)|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|" << q2.v[0] * RadToDeg << "|" << q2.v[1] * RadToDeg << "|" << q2.v[2] * RadToDeg;
+
 			}
 			_PlatformPoseIndex++;
 		}
@@ -879,9 +909,9 @@ namespace vrmotioncompensation
 		}
 
 
-
+		// 将四元数传唤为欧拉角(弧度),返回数据顺序为  pitch roll yaw
 		// 专门针对 OpenVR/SteamVR 的 (Qy * Qx * Qz) 顺序进行逆运算
-		// 实测有效
+		// 实测有效  
 		vr::HmdVector3d_t MotionCompensationManager::QuaternionToEulerOpenVR(double w, double x, double y, double z) {
 			vr::HmdVector3d_t angles;
 
