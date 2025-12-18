@@ -382,14 +382,27 @@ namespace vrmotioncompensation
 		{
 			if (_Enabled)//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
 			{
-				// All filter calculations are done within the function for the reference tracker, because the HMD position is updated 3x more often.
-				// Convert pose from driver space to app space
-				// 所有滤波器计算都在参考跟踪器的函数中完成，因为头显位置的更新频率是其他部分的3倍。
-				// 将姿态从驱动程序坐标系转换到应用程序坐标系
+				// pose.qWorldFromDriverRotation 这个四元数意思是从驱动坐标到世界坐标的旋转量.
+				// 通过 quaternionConjugate 函数 得到了这个旋转量的逆,即 tmpConj
+				// 之后用 tmpConj * 任何世界坐标系下的旋转量,就可以把这个旋转量转换回驱动坐标系
 				vr::HmdQuaternion_t tmpConj = vrmath::quaternionConjugate(pose.qWorldFromDriverRotation);
 
-				//转换到世界坐标系 (Driver Space -> App Space):
-				vr::HmdVector3d_t poseWorldPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, pose.vecPosition, false) + pose.vecWorldFromDriverTranslation;
+				//将头显在硬件坐标系下的原始位置转换到世界坐标系下 (Driver Space -> App Space)
+				//分为两个部分
+				//1 旋转向量(位置)
+				//		想象你的定位基站是歪着挂在墙角的（向下倾斜 45 度）。
+				//		头显在你前方 1 米处。但在基站看来，头显是在它“上方” 1 米处。
+				//		这一步就是把这个“相对于基站的歪坐标”，旋转修正为“相对于地面的平坐标”。
+				//		结果：此时得到的坐标，方向已经和世界坐标一致了（比如 Y 轴垂直向上），但原点还在基站上。
+				//2 平移/位移
+				//		加上这个偏移量，把原点从驱动坐标转到世界坐标。
+				vr::HmdVector3d_t poseWorldPos = vrmath::quaternionRotateVector(
+					pose.qWorldFromDriverRotation,	//旋转
+					tmpConj,						//逆旋转
+					pose.vecPosition,				//头显在硬件坐标系下的原始位置
+					false) 
+					+ pose.vecWorldFromDriverTranslation//(平移/位移)  
+					;
 
 				// Do motion compensation
 				vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * pose.qRotation;
@@ -484,7 +497,7 @@ namespace vrmotioncompensation
 				////////////////}
 
 				//	-------------关键点 : 这里直接修改了参数 pose 的成员变量。
-				//应用旋转补偿
+				//将世界坐标系下的补偿量 compensatedPoseWorldRot 转回到了驱动坐标系,并应用到pose中使其生效
 				pose.qRotation = tmpConj * compensatedPoseWorldRot;
 
 

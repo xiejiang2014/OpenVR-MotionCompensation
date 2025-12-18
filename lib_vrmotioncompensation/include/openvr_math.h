@@ -247,6 +247,14 @@ namespace vrmath
 		}
 	}
 
+	/// <summary>
+	/// 
+	/// </summary>
+	/// <param name="quat">原始旋转</param>
+	/// <param name="quatInv">原始旋转的逆</param>
+	/// <param name="vector">原始位置</param>
+	/// <param name="reverse"></param>
+	/// <returns></returns>
 	inline vr::HmdVector3d_t quaternionRotateVector(const vr::HmdQuaternion_t& quat, const vr::HmdQuaternion_t& quatInv, const double(&vector)[3], bool reverse = false)
 	{
 		if (reverse)
