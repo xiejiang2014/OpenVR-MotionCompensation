@@ -377,11 +377,15 @@ namespace vrmotioncompensation
 				// 将姿态从驱动程序坐标系转换到应用程序坐标系
 				vr::HmdQuaternion_t tmpConj = vrmath::quaternionConjugate(pose.qWorldFromDriverRotation);
 
-				//转换到世界坐标系 (Driver Space -> App Space):
+				//将头显位置从驱动坐标系转换到世界坐标系 (Driver Space -> App Space):
 				vr::HmdVector3d_t poseWorldPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, pose.vecPosition, false) + pose.vecWorldFromDriverTranslation;
 
-				// Do motion compensation
+				//将头显旋转从驱动坐标系转换到世界坐标系
 				vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * pose.qRotation;
+
+
+				//--------------------------------------------
+
 				_RefLock.lock();
 				_ZeroLock.lock();
 
