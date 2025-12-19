@@ -38,10 +38,24 @@ namespace vrmotioncompensation
 		double HeaderQy;
 		double HeaderQz;
 
-		double Reserved_double[6];
+		double RefRotQw;
+		double RefRotQx;
+		double RefRotQy;
+		double RefRotQz;
+
+		double ZeroMotionYaw;
+
+		double PitchInRRP;
+		double RollInRRP;
+		double YawInRRP;
+
+		int Reserved_int0;
+		int Reserved_int1;
+		int Reserved_int2;
+		int Reserved_int3;
+		int Reserved_int4;
 
 		uint32_t dataIndex;
-		int Reserved_int[9];
 
 		MMFstruct_OVRMC_v1()
 		{

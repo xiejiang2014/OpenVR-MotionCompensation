@@ -438,23 +438,10 @@ namespace vrmotioncompensation
 				// 将头显旋转从驱动坐标系转换到世界坐标系 (Driver Space -> App Space):  水平时 pitch 和 roll 角度为0   正对b通道探头时 yaw 角度为0
 				vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * pose.qRotation;
 
-				//回传头显实时姿态
-				if (_PVR2H)
-				{
-					_PVR2H->HeaderQw = poseWorldRot.w;
-					_PVR2H->HeaderQx = poseWorldRot.x;
-					_PVR2H->HeaderQy = poseWorldRot.y;
-					_PVR2H->HeaderQz = poseWorldRot.z;
-				}
+
 				//---------------------------------------------------
 
-
 				vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
-				if (_MotionPoseIndex % 100 == 0)
-				{					
-					//LOG(INFO) << "头显航向	|" << headerQ.v[2] * RadToDeg;
-				}
-
 				if (!_zeroMotionRotValid)
 				{
 					_zeroMotionRot = poseWorldRot;
@@ -564,6 +551,27 @@ namespace vrmotioncompensation
 				//vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, true);
 				//_copyVec(pose.vecPosition, adjPoseDriverPos.v);
 				_MotionPoseIndex++;
+
+
+				//回传头显实时姿态
+				if (_PVR2H)
+				{
+					_PVR2H->HeaderQw = poseWorldRot.w;
+					_PVR2H->HeaderQx = poseWorldRot.x;
+					_PVR2H->HeaderQy = poseWorldRot.y;
+					_PVR2H->HeaderQz = poseWorldRot.z;
+
+					_PVR2H->RefRotQw = _RefRot.w;
+					_PVR2H->RefRotQx = _RefRot.x;
+					_PVR2H->RefRotQy = _RefRot.y;
+					_PVR2H->RefRotQz = _RefRot.z;
+
+					_PVR2H->ZeroMotionYaw = _zeroMotionYaw;
+
+					_PVR2H->PitchInRRP = _posInRRP[0];
+					_PVR2H->RollInRRP = _posInRRP[1];
+					_PVR2H->YawInRRP = _posInRRP[2];
+				}
 			}
 
 
@@ -601,21 +609,21 @@ namespace vrmotioncompensation
 			}
 
 
-			double pitch = localData.Rotation.v[0];
-			double roll  = localData.Rotation.v[1];
-			double yaw   = localData.Rotation.v[2];
-			double Sway  = localData.Translation.v[0];
-			double Heave = localData.Translation.v[1];
-			double Surge = localData.Translation.v[2];
+			double pitch = localData.Rotation.v[0];//角度
+			double roll  = localData.Rotation.v[1];//角度
+			double yaw   = localData.Rotation.v[2];//角度
+			double Sway  = localData.Translation.v[0];//米
+			double Heave = localData.Translation.v[1];//米
+			double Surge = localData.Translation.v[2];//米
 
 
 			//旋转到头显的指向
 			std::vector<float> pos_original = { (float)pitch,(float)roll,(float)yaw, (float)Sway, (float)Surge, (float)Heave };
-			_rrp[2] = (float)(0 -_zeroMotionYaw* RadToDeg);
-			std::vector<float> POSInRRP = CoordinateTransform(pos_original, _rrp);
+			_rrp[2] = (float)(-_zeroMotionYaw* RadToDeg);
+			_posInRRP = ProjectRotationVector(pos_original, _rrp);
 
 			//todo 临时屏蔽
-			POSInRRP= { (float)pitch,(float)roll,(float)yaw, (float)Sway, (float)Surge, (float)Heave };
+			//std::vector<float>	POSInRRP= { (float)pitch,(float)roll,(float)yaw, (float)Sway, (float)Surge, (float)Heave };
 
 			//if (_PlatformPoseIndex % 10 == 0)
 			//{
@@ -625,20 +633,20 @@ namespace vrmotioncompensation
 
 
 			//单位换算  正负转换
-			float pitchInRRP = POSInRRP[0] * DegToRad;		//Pitch
-			float rollInRRP  = -POSInRRP[1] * DegToRad;	//Roll
-			float yawInRRP   = POSInRRP[2] * DegToRad;		//Yaw
+			float pitchInRRP = _posInRRP[0] * DegToRad;		//Pitch
+			float rollInRRP  = -_posInRRP[1] * DegToRad;	//Roll
+			float yawInRRP   = _posInRRP[2] * DegToRad;		//Yaw
 
-			POSInRRP[3] = POSInRRP[3] / 1000;			//Sway
-			POSInRRP[4] = -POSInRRP[4] / 1000;		//Surge
-			POSInRRP[5] = POSInRRP[5] / 1000;			//Heave
+			_posInRRP[3] = _posInRRP[3] / 1000;			//Sway
+			_posInRRP[4] = -_posInRRP[4] / 1000;		//Surge
+			_posInRRP[5] = _posInRRP[5] / 1000;			//Heave
 
 
 			//----------------------------------------平移量
 			vr::HmdVector3d_t rawPos;
-			rawPos.v[0] = POSInRRP[3];
-			rawPos.v[1] = POSInRRP[5];
-			rawPos.v[2] = POSInRRP[4];
+			rawPos.v[0] = _posInRRP[3];
+			rawPos.v[1] = _posInRRP[5];
+			rawPos.v[2] = _posInRRP[4];
 
 			//----------------------------------------旋转量
 			vr::HmdQuaternion_t rawRot;

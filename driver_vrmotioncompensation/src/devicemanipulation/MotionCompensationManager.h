@@ -297,6 +297,7 @@ namespace vrmotioncompensation
 			vr::HmdVector3d_t QuaternionToEulerOpenVR(double w, double x, double y, double z);
 
 			std::vector<float> _rrp = { 0, 0, 0, 0, 0, 0 };
+			std::vector<float> _posInRRP = { 0, 0, 0, 0, 0, 0 };
 			std::vector<float> CoordinateTransform(const std::vector<float>& pos_original, const std::vector<float>& RRP);
 			std::vector<float> ProjectRotationVector(const std::vector<float>& pos_original, const std::vector<float>& rrp);
 		};
