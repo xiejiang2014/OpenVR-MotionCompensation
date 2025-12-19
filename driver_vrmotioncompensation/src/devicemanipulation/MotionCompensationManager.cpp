@@ -27,23 +27,44 @@ namespace vrmotioncompensation
 
 		MotionCompensationManager::MotionCompensationManager(ServerDriver* parent) : m_parent(parent)
 		{
+			LOG(INFO) << "MotionCompensationManager 构造    ";
+
 			try
 			{
 				// create shared memory  创建内存映射
-				_shdmem = { boost::interprocess::open_or_create, "OVRMC_MMFv1", boost::interprocess::read_write, 4096 };
+				_shdmemH2VR = { boost::interprocess::open_or_create, "OVRMC_Darren_H2VR", boost::interprocess::read_write, 4096 };
 				//获取这个映射的元素内存
-				_region = { _shdmem, boost::interprocess::read_write };
+				_regionH2VR = { _shdmemH2VR, boost::interprocess::read_write };
 
 				// get pointer address and fill it with data
-				// 强行以 MMFstruct_OVRMC_v1 为类型来操作映射的内存,并将指针放到 _Poffset 里面
-				_Poffset = static_cast<MMFstruct_OVRMC_v1*>(_region.get_address());
-				*_Poffset = _Offset;  //向指针填充数据
-				LOG(INFO) << "Shared memory OVRMC_MMFv1 created";
+				// 强行以 MMFstruct_OVRMC_v1 为类型来操作映射的内存,并将指针放到 _PH2VR 里面
+				_PH2VR = static_cast<MMFstruct_OVRMC_v1*>(_regionH2VR.get_address());
+				*_PH2VR = _H2VR;  //向指针填充数据
+				LOG(INFO) << "Shared memory OVRMC_Darren_H2VR created";
 			}
 			catch (boost::interprocess::interprocess_exception& e)
 			{
-				LOG(ERROR) << "Could not create or open shared memory. Error code " << e.get_error_code();
+				LOG(INFO) << "Could not create or open shared memory OVRMC_Darren_H2VR. Error code " << e.get_error_code();
 			}
+
+
+			//try
+			//{
+			//	// create shared memory  创建内存映射
+			//	_shdmemVR2H = { boost::interprocess::open_or_create, "OVRMC_Darren_VR2H", boost::interprocess::read_write, 4096 };
+			//	//获取这个映射的元素内存
+			//	_regionVR2H = { _shdmemVR2H, boost::interprocess::read_write };
+
+			//	// get pointer address and fill it with data
+			//	// 强行以 MMFstruct_OVRMC_v1 为类型来操作映射的内存,并将指针放到 _PVR2H 里面
+			//	_PVR2H = static_cast<MMFstruct_OVRMC_v1*>(_regionVR2H.get_address());
+			//	*_PVR2H = _VR2H;  //向指针填充数据
+			//	LOG(INFO) << "Shared memory OVRMC_Darren_VR2H created";
+			//}
+			//catch (boost::interprocess::interprocess_exception& e)
+			//{
+			//	LOG(INFO) << "Could not create or open shared memory OVRMC_Darren_VR2H. Error code " << e.get_error_code();
+			//}
 		}
 
 		bool MotionCompensationManager::setMotionCompensationMode(MotionCompensationMode Mode, int McDevice, int RtDevice)
@@ -99,10 +120,10 @@ namespace vrmotioncompensation
 
 		void MotionCompensationManager::setOffsets(MMFstruct_OVRMC_v1 offsets)
 		{
-			//_Offset.Translation = offsets.Translation;
-			//_Offset.Rotation = offsets.Rotation;
-			//_Offset = offsets;
-			//*_Poffset = _Offset;
+			//_H2VR.Translation = offsets.Translation;
+			//_H2VR.Rotation = offsets.Rotation;
+			//_H2VR = offsets;
+			//*_PH2VR = _H2VR;
 		}
 
 		bool MotionCompensationManager::isZeroPoseValid()
@@ -407,6 +428,16 @@ namespace vrmotioncompensation
 				// 将头显旋转从驱动坐标系转换到世界坐标系 (Driver Space -> App Space):
 				vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * pose.qRotation;
 
+				//回传头显实时姿态
+				if (_PVR2H)
+				{
+					MMFstruct_OVRMC_v1 vr2h = *_PVR2H;
+
+					vr2h.HeaderQw = poseWorldRot.w;
+					vr2h.HeaderQx = poseWorldRot.x;
+					vr2h.HeaderQy = poseWorldRot.y;
+					vr2h.HeaderQz = poseWorldRot.z;
+				}
 				//---------------------------------------------------
 
 
@@ -515,7 +546,7 @@ namespace vrmotioncompensation
 				{
 					vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
 					vr::HmdVector3d_t qi = QuaternionToEulerOpenVR(_RefRotInv.w, _RefRotInv.x, _RefRotInv.y, _RefRotInv.z);
-					LOG(INFO) << "MotionPose 应用补偿 	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|"  << qi.v[0] * RadToDeg << "|" << qi.v[1] * RadToDeg << "|" << qi.v[2] * RadToDeg;
+					//LOG(INFO) << "MotionPose 应用补偿 	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|"  << qi.v[0] * RadToDeg << "|" << qi.v[1] * RadToDeg << "|" << qi.v[2] * RadToDeg;
 				}
 
 
@@ -542,10 +573,10 @@ namespace vrmotioncompensation
 			//return;
 
 			// [检查 1] 空指针与数据有效性
-			if (!_Poffset) return;
+			if (!_PH2VR) return;
 
 			// [快照] 读取共享内存
-			MMFstruct_OVRMC_v1 localData = *_Poffset;
+			MMFstruct_OVRMC_v1 localData = *_PH2VR;
 
 			// 数据无效
 			if (localData.dataIndex <= 0) return;
@@ -773,11 +804,11 @@ namespace vrmotioncompensation
 
 		void MotionCompensationManager::runFrame()
 		{
-			/*if (_Offset.Flags_1 & (1 << FLAG_ENABLE_MC) && _Mode == MotionCompensationMode::Disabled)
+			/*if (_H2VR.Flags_1 & (1 << FLAG_ENABLE_MC) && _Mode == MotionCompensationMode::Disabled)
 			{
 
 			}
-			else if (!(_Offset.Flags_1 & (1 << FLAG_ENABLE_MC)) && _Mode == MotionCompensationMode::ReferenceTracker)
+			else if (!(_H2VR.Flags_1 & (1 << FLAG_ENABLE_MC)) && _Mode == MotionCompensationMode::ReferenceTracker)
 			{
 				setMotionCompensationMode(MotionCompensationMode::ReferenceTracker, -1, -1);
 			}*/

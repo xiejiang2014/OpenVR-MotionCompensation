@@ -212,8 +212,6 @@ namespace vrmotioncompensation
 
 			ServerDriver* m_parent;
 
-			boost::interprocess::windows_shared_memory _shdmem;
-			boost::interprocess::mapped_region _region;
 
 			int _McDeviceID = -1;
 			int _RtDeviceID = -1;
@@ -231,10 +229,24 @@ namespace vrmotioncompensation
 			bool _Enabled = false;
 			MotionCompensationMode _Mode = MotionCompensationMode::Disabled;			
 			
-			// Offset data
-			MMFstruct_OVRMC_v1 _Offset;
-			MMFstruct_OVRMC_v1* _Poffset = nullptr;
 
+			//----------------------------h2vr
+
+			boost::interprocess::windows_shared_memory _shdmemH2VR;
+			boost::interprocess::mapped_region _regionH2VR;
+			// Offset data
+			MMFstruct_OVRMC_v1 _H2VR;
+			MMFstruct_OVRMC_v1* _PH2VR = nullptr;
+			//----------------------------vr2h
+
+			boost::interprocess::windows_shared_memory _shdmemVR2H;
+			boost::interprocess::mapped_region _regionVR2H;
+			MMFstruct_OVRMC_v1 _VR2H;
+			MMFstruct_OVRMC_v1* _PVR2H = nullptr;
+			//----------------------------
+			// 
+			// 
+			// 
 			// Zero position
 			vr::HmdVector3d_t _ZeroPos = { 0, 0, 0 };
 			vr::HmdQuaternion_t _ZeroRot = { 1, 0, 0, 0 };

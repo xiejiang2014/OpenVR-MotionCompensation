@@ -27,25 +27,25 @@ namespace vrmotioncompensation
 
 	struct MMFstruct_OVRMC_v1
 	{
-		/*#define FLAG_ENABLE_MC		0
-		#define FLAG_RESETZEROPOSE	1*/
+		uint32_t dataIndex;				//数据索引
+		vr::HmdVector3d_t Translation;	//3个double 位置
+		vr::HmdVector3d_t Rotation;		//3个double 旋转角度
 
-		vr::HmdVector3d_t Translation;	//3个double
-		vr::HmdVector3d_t Rotation;		//3个double
-		vr::HmdQuaternion_t QRotation;	//4个double
-		uint32_t Flags_1;
-		uint32_t Flags_2;
-		double Reserved_double[10];
-		uint32_t dataIndex;
-		int Reserved_int[9];
+		double Reserved_double1[4];		//保留
+
+		//以下为回传上位机
+		double HeaderQw;
+		double HeaderQx;
+		double HeaderQy;
+		double HeaderQz;
+
+		double Reserved_double2[6];
+		int Reserved_int[10];
 
 		MMFstruct_OVRMC_v1()
 		{
 			Translation = { 0, 0, 0 };
 			Rotation = { 0, 0, 0 };
-			QRotation = { 0, 0, 0, 0 };
-			Flags_1 = 0;
-			Flags_2 = 0;
 		}
 	};
 
