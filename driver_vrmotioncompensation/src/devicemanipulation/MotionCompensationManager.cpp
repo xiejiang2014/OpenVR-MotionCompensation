@@ -181,7 +181,7 @@ namespace vrmotioncompensation
 		/// <param name="pose"></param>
 		void MotionCompensationManager::updateRefPose(const vr::DriverPose_t& pose)
 		{
-			//return; //禁用此函数
+			return; //禁用此函数
 
 			// From https://github.com/ValveSoftware/driver_hydra/blob/master/drivers/driver_hydra/driver_hydra.cpp Line 835:
 			// "True acceleration is highly volatile, so it's not really reasonable to
@@ -404,9 +404,10 @@ namespace vrmotioncompensation
 					+ pose.vecWorldFromDriverTranslation//(平移/位移)  
 					;
 
-				// Do motion compensation
+				// 将头显旋转从驱动坐标系转换到世界坐标系 (Driver Space -> App Space):
 				vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * pose.qRotation;
 
+				//---------------------------------------------------
 
 
 				vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
@@ -434,22 +435,31 @@ namespace vrmotioncompensation
 					LOG(ERROR) << "updatePoseFromPlatform error  " << e.what();
 				}
 
+				//---------------------------------------------------
 
 				_RefLock.lock();
 				_ZeroLock.lock();
 
-				//这是一行极其复杂的向量数学运算：
-				vr::HmdVector3d_t compensatedPoseWorldPos = _ZeroPos + //把结果加回到基准位置
-					vrmath::quaternionRotateVector(
+				//计算位移补偿
+				//数学物理含义是：计算头显相对于动感平台的“局部坐标”，并将其固定在虚拟世界的原点上。
+				//第2步逆旋转:
+				//	假设参考器 抬头 30度。
+				//	在世界坐标系看来，你的头不仅向后移了，还向上移了（因为有摇臂长度）。
+				//	第1步算出的 relativeVector 虽然扣除了中心点的位移，但这个向量的方向在世界空间里依然是歪的（斜向上 30 度）。
+				//	我们需要把这个向量 “按回去”。
+				//	逆旋转 30 度：把那个斜向上的向量，转回到水平状态。
+				vr::HmdVector3d_t compensatedPoseWorldPos = _ZeroPos + //第3步 把结果加回到基准位置
+					vrmath::quaternionRotateVector(   //第2步
 					_RefRot, 
 					_RefRotInv,             //应用座椅旋转的逆。如果不动，座椅转了 10 度，头显也会跟着转 10 度。这里我们让头显反向转 10 度，这样在视觉上头显就“不动”了。
-					poseWorldPos - _RefPos, //计算头显相对于参考追踪器（座椅）的位置。
+					poseWorldPos - _RefPos, //计算头显相对于参考追踪器（座椅）的位置。  第1步,得到头显与参考点的相对位置
 					true
 				);
 
 				_ZeroLock.unlock();
 
-				//应用旋转补偿 直接把座椅旋转的逆 (_RefRotInv) 乘到头显旋转上。这实现了“去耦合”。
+
+				//计算旋转补偿 直接把座椅旋转的逆 (_RefRotInv) 乘到头显旋转上。这实现了“去耦合”。
 				vr::HmdQuaternion_t compensatedPoseWorldRot = _RefRotInv *  poseWorldRot;
 
 				_RefLock.unlock();
@@ -496,7 +506,7 @@ namespace vrmotioncompensation
 				////////////////	//	结果 : 告诉 SteamVR “虽然我的传感器说我在动，但实际上我在虚拟世界里没动（或者动得没那么快）”。
 				////////////////}
 
-				//	-------------关键点 : 这里直接修改了参数 pose 的成员变量。
+				//	-------------应用补偿 : 这里直接修改了参数 pose 的成员变量。
 				//将世界坐标系下的补偿量 compensatedPoseWorldRot 转回到了驱动坐标系,并应用到pose中使其生效
 				pose.qRotation = tmpConj * compensatedPoseWorldRot;
 
@@ -512,8 +522,8 @@ namespace vrmotioncompensation
 				// convert back to driver space
 				// 转换回驱动坐标系 (App Space -> Driver Space):
 				// SteamVR 只要 Driver Space 的数据，所以算完还得转回去。
-				vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, true);
-				_copyVec(pose.vecPosition, adjPoseDriverPos.v);
+				//vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, true);
+				//_copyVec(pose.vecPosition, adjPoseDriverPos.v);
 				_MotionPoseIndex++;
 			}
 
@@ -529,7 +539,7 @@ namespace vrmotioncompensation
 
 		void MotionCompensationManager::updatePoseFromPlatform()
 		{
-			return;
+			//return;
 
 			// [检查 1] 空指针与数据有效性
 			if (!_Poffset) return;
@@ -563,7 +573,7 @@ namespace vrmotioncompensation
 			//旋转到头显的指向
 			std::vector<float> pos_original = { (float)pitch,(float)roll,(float)yaw, (float)Sway, (float)Surge, (float)Heave };
 			_rrp[2] = (float)(0 -_zeroMotionYaw* RadToDeg);
-			std::vector<float> POSInRRP = ProjectRotationVector(pos_original, _rrp);
+			std::vector<float> POSInRRP = CoordinateTransform(pos_original, _rrp);
 
 			//todo 临时屏蔽
 			POSInRRP= { (float)pitch,(float)roll,(float)yaw, (float)Sway, (float)Surge, (float)Heave };
@@ -1180,21 +1190,20 @@ namespace vrmotioncompensation
 	 * @brief 旋转向量投影 (ProjectRotationVector)
 	 * 将 pos_original 的旋转值视为矢量，投影到 RRP 坐标系下。
 	 *
-	 * @param pos_original 原始姿态及位置 [rx, ry, rz, x, y, z] (角度制)
-	 * @param rrp 参考坐标系姿态及位置 [rx, ry, rz, x, y, z] (角度制)
+	 * @param pos_original 原始姿态及位置 [rx, ry, rz, x, y, z] (角度/或弧度都可以)
+	 * @param rrp 参考坐标系姿态及位置 [rx, ry, rz, x, y, z] (角度)
 	 * @return std::vector<float> 投影后的分量 [rx', ry', rz', x, y, z]
 	 */
 		std::vector<float>MotionCompensationManager::ProjectRotationVector(const std::vector<float>& pos_original, const std::vector<float>& rrp)
 		{
 			// 创建返回结果，大小为6
 			std::vector<float> result(6);
-
+			
 			// 1. 预计算三角函数值
 			// RRP 的旋转角度转弧度
-			float radDeg = static_cast<float>(M_PI) / 180.0f;
-			float rrpX = rrp[0] * radDeg;
-			float rrpY = rrp[1] * radDeg;
-			float rrpZ = rrp[2] * radDeg;
+			float rrpX = rrp[0] * DegToRad;
+			float rrpY = rrp[1] * DegToRad;
+			float rrpZ = rrp[2] * DegToRad;
 
 			float cx = std::cos(rrpX);
 			float sx = std::sin(rrpX);
