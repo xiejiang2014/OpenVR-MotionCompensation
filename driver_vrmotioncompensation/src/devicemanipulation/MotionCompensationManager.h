@@ -237,12 +237,16 @@ namespace vrmotioncompensation
 			// Offset data
 			MMFstruct_OVRMC_v1 _H2VR;
 			MMFstruct_OVRMC_v1* _PH2VR = nullptr;
+
+			std::string _msgH2VR;
 			//----------------------------vr2h
 
 			boost::interprocess::windows_shared_memory _shdmemVR2H;
 			boost::interprocess::mapped_region _regionVR2H;
 			MMFstruct_OVRMC_v1 _VR2H;
 			MMFstruct_OVRMC_v1* _PVR2H = nullptr;
+
+			std::string _msgVR2H;
 			//----------------------------
 			// 
 			// 

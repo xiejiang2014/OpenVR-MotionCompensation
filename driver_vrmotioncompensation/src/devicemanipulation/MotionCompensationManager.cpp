@@ -41,30 +41,36 @@ namespace vrmotioncompensation
 				_PH2VR = static_cast<MMFstruct_OVRMC_v1*>(_regionH2VR.get_address());
 				*_PH2VR = _H2VR;  //向指针填充数据
 				LOG(INFO) << "Shared memory OVRMC_Darren_H2VR created";
+
+				_msgH2VR = "Shared memory OVRMC_Darren_H2VR created";
 			}
 			catch (boost::interprocess::interprocess_exception& e)
 			{
-				LOG(INFO) << "Could not create or open shared memory OVRMC_Darren_H2VR. Error code " << e.get_error_code();
+				LOG(INFO) << "Could not create or open shared memory OVRMC_Darren_H2VR. Error code " + e.get_error_code();
+				_msgH2VR = "Could not create or open shared memory OVRMC_Darren_H2VR. Error code " + e.get_error_code();
 			}
 
 
-			//try
-			//{
-			//	// create shared memory  创建内存映射
-			//	_shdmemVR2H = { boost::interprocess::open_or_create, "OVRMC_Darren_VR2H", boost::interprocess::read_write, 4096 };
-			//	//获取这个映射的元素内存
-			//	_regionVR2H = { _shdmemVR2H, boost::interprocess::read_write };
+			try
+			{
+				// create shared memory  创建内存映射
+				_shdmemVR2H = { boost::interprocess::open_or_create, "OVRMC_Darren_VR2H", boost::interprocess::read_write, 4096 };
+				//获取这个映射的元素内存
+				_regionVR2H = { _shdmemVR2H, boost::interprocess::read_write };
 
-			//	// get pointer address and fill it with data
-			//	// 强行以 MMFstruct_OVRMC_v1 为类型来操作映射的内存,并将指针放到 _PVR2H 里面
-			//	_PVR2H = static_cast<MMFstruct_OVRMC_v1*>(_regionVR2H.get_address());
-			//	*_PVR2H = _VR2H;  //向指针填充数据
-			//	LOG(INFO) << "Shared memory OVRMC_Darren_VR2H created";
-			//}
-			//catch (boost::interprocess::interprocess_exception& e)
-			//{
-			//	LOG(INFO) << "Could not create or open shared memory OVRMC_Darren_VR2H. Error code " << e.get_error_code();
-			//}
+				// get pointer address and fill it with data
+				// 强行以 MMFstruct_OVRMC_v1 为类型来操作映射的内存,并将指针放到 _PVR2H 里面
+				_PVR2H = static_cast<MMFstruct_OVRMC_v1*>(_regionVR2H.get_address());
+				*_PVR2H = _VR2H;  //向指针填充数据
+				LOG(INFO) << "Shared memory OVRMC_Darren_VR2H created";
+				_msgVR2H= "Shared memory OVRMC_Darren_VR2H created";
+			}
+			catch (boost::interprocess::interprocess_exception& e)
+			{
+				LOG(INFO) << "Could not create or open shared memory OVRMC_Darren_VR2H. Error code " + e.get_error_code();
+
+				_msgVR2H = "Could not create or open shared memory OVRMC_Darren_VR2H. Error code " + e.get_error_code();
+			}
 		}
 
 		bool MotionCompensationManager::setMotionCompensationMode(MotionCompensationMode Mode, int McDevice, int RtDevice)
@@ -403,6 +409,10 @@ namespace vrmotioncompensation
 		{
 			if (_Enabled)//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
 			{
+				//LOG(INFO) << _msgH2VR;
+				//LOG(INFO) << _msgVR2H;
+
+
 				// pose.qWorldFromDriverRotation 这个四元数意思是从驱动坐标到世界坐标的旋转量.
 				// 通过 quaternionConjugate 函数 得到了这个旋转量的逆,即 tmpConj
 				// 之后用 tmpConj * 任何世界坐标系下的旋转量,就可以把这个旋转量转换回驱动坐标系
@@ -425,18 +435,16 @@ namespace vrmotioncompensation
 					+ pose.vecWorldFromDriverTranslation//(平移/位移)  
 					;
 
-				// 将头显旋转从驱动坐标系转换到世界坐标系 (Driver Space -> App Space):
+				// 将头显旋转从驱动坐标系转换到世界坐标系 (Driver Space -> App Space):  水平时 pitch 和 roll 角度为0   正对b通道探头时 yaw 角度为0
 				vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * pose.qRotation;
 
 				//回传头显实时姿态
 				if (_PVR2H)
 				{
-					MMFstruct_OVRMC_v1 vr2h = *_PVR2H;
-
-					vr2h.HeaderQw = poseWorldRot.w;
-					vr2h.HeaderQx = poseWorldRot.x;
-					vr2h.HeaderQy = poseWorldRot.y;
-					vr2h.HeaderQz = poseWorldRot.z;
+					_PVR2H->HeaderQw = poseWorldRot.w;
+					_PVR2H->HeaderQx = poseWorldRot.x;
+					_PVR2H->HeaderQy = poseWorldRot.y;
+					_PVR2H->HeaderQz = poseWorldRot.z;
 				}
 				//---------------------------------------------------
 
