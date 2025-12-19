@@ -774,11 +774,6 @@ namespace vrmotioncompensation
 			_ZeroLock.lock();
 			_RefVelLock.lock();
 
-			// 强制初始化 Zero
-			_ZeroPos = { 0, 0, 0 };
-			_ZeroRot = { 1, 0, 0, 0 };
-			_ZeroPoseValid = true;
-
 			// 设置参考数据 (无论是否复位，当前位置都是准确的)
 			_RefPos = rawPos;
 			_RefRot = rawRot * vrmath::quaternionConjugate(_ZeroRot);

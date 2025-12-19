@@ -31,6 +31,7 @@ namespace vrmotioncompensation
 			//实测在用手柄进行补偿时, 以下两个分支的代码都会被调用, 大概是 ReferenceTracker 每调用一次, MotionCompensated会调用3-6次
 			if (m_deviceMode == MotionCompensationDeviceMode::ReferenceTracker)
 			{ 
+				return true;
 				//LOG(INFO) << "handlePoseUpdate() m_deviceMode= ReferenceTracker";
 
 
