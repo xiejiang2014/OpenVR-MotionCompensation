@@ -488,8 +488,8 @@ namespace vrmotioncompensation
 		}
 	}
 
-	//把 MMFstruct_OVRMC_v1 的数据发送给驱动层
-	void VRMotionCompensation::setOffsets(MMFstruct_OVRMC_v1 offsets)
+	//把 MMFstruct_H2VR 的数据发送给驱动层
+	void VRMotionCompensation::setOffsets(MMFstruct_H2VR offsets)
 	{
 		if (_ipcServerQueue)
 		{

@@ -37,8 +37,8 @@ namespace vrmotioncompensation
 				_regionH2VR = { _shdmemH2VR, boost::interprocess::read_write };
 
 				// get pointer address and fill it with data
-				// 强行以 MMFstruct_OVRMC_v1 为类型来操作映射的内存,并将指针放到 _PH2VR 里面
-				_PH2VR = static_cast<MMFstruct_OVRMC_v1*>(_regionH2VR.get_address());
+				// 强行以 MMFstruct_H2VR 为类型来操作映射的内存,并将指针放到 _PH2VR 里面
+				_PH2VR = static_cast<MMFstruct_H2VR*>(_regionH2VR.get_address());
 				*_PH2VR = _H2VR;  //向指针填充数据
 				LOG(INFO) << "Shared memory OVRMC_Darren_H2VR created";
 
@@ -59,8 +59,8 @@ namespace vrmotioncompensation
 				_regionVR2H = { _shdmemVR2H, boost::interprocess::read_write };
 
 				// get pointer address and fill it with data
-				// 强行以 MMFstruct_OVRMC_v1 为类型来操作映射的内存,并将指针放到 _PVR2H 里面
-				_PVR2H = static_cast<MMFstruct_OVRMC_v1*>(_regionVR2H.get_address());
+				// 强行以 MMFstruct_H2VR 为类型来操作映射的内存,并将指针放到 _PVR2H 里面
+				_PVR2H = static_cast<MMFstruct_VR2H*>(_regionVR2H.get_address());
 				*_PVR2H = _VR2H;  //向指针填充数据
 				LOG(INFO) << "Shared memory OVRMC_Darren_VR2H created";
 				_msgVR2H= "Shared memory OVRMC_Darren_VR2H created";
@@ -125,7 +125,7 @@ namespace vrmotioncompensation
 			_zeroVec(_RefRotAcc);
 		}
 
-		void MotionCompensationManager::setOffsets(MMFstruct_OVRMC_v1 offsets)
+		void MotionCompensationManager::setOffsets(MMFstruct_H2VR offsets)
 		{
 			_H2VR.Translation = offsets.Translation;
 			_H2VR.Rotation = offsets.Rotation;
@@ -346,17 +346,17 @@ namespace vrmotioncompensation
 
 			// calculate orientation difference and its inverse
 			// _ZeroRot: 动感座椅静止归零时的旋转角度（基准）。
-			//	poseWorldRot : 动感座椅现在的旋转角度。
+			//	_trackWorldRot : 动感座椅现在的旋转角度。
 			//	_RefRot : 现在的角度相对于基准角度转了多少。
 			//	_RefRotInv : _RefRot 的逆（Inverse）。
 			//	意义：如果座椅向左转了 10 度，_RefRotInv 就是“向右转 10 度”。
 			//	后续：这个逆旋转将被应用到头显上，从而抵消掉座椅的运动。
 
-			vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * _Filter_rotPosition[1];
+			_trackWorldRot = pose.qWorldFromDriverRotation * _Filter_rotPosition[1];
 			_RefLock.lock();
 			_ZeroLock.lock();
 			//核心算法：计算“相对偏移”(The Magic)
-			_RefRot = poseWorldRot * vrmath::quaternionConjugate(_ZeroRot);
+			_RefRot = _trackWorldRot * vrmath::quaternionConjugate(_ZeroRot);
 			_RefRotInv = vrmath::quaternionConjugate(_RefRot);
 			_ZeroLock.unlock();
 			_RefLock.unlock();
@@ -543,21 +543,29 @@ namespace vrmotioncompensation
 				//回传头显实时姿态
 				if (_PVR2H)
 				{
-					_PVR2H->HeaderQw = poseWorldRot.w;
-					_PVR2H->HeaderQx = poseWorldRot.x;
-					_PVR2H->HeaderQy = poseWorldRot.y;
-					_PVR2H->HeaderQz = poseWorldRot.z;
+					_PVR2H->HeaderRotw = poseWorldRot.w;
+					_PVR2H->HeaderRotx = poseWorldRot.x;
+					_PVR2H->HeaderRoty = poseWorldRot.y;
+					_PVR2H->HeaderRotz = poseWorldRot.z;
+
+					_PVR2H->ZeroRotW = _ZeroRot.w;
+					_PVR2H->ZeroRotX = _ZeroRot.x;
+					_PVR2H->ZeroRotY = _ZeroRot.y;
+					_PVR2H->ZeroRotZ = _ZeroRot.z;
+
+
+					_PVR2H->TrackRotW = _trackWorldRot.w;
+					_PVR2H->TrackRotX = _trackWorldRot.x;
+					_PVR2H->TrackRotY = _trackWorldRot.y;
+					_PVR2H->TrackRotZ = _trackWorldRot.z;
+
 
 					_PVR2H->RefRotQw = _RefRot.w;
 					_PVR2H->RefRotQx = _RefRot.x;
 					_PVR2H->RefRotQy = _RefRot.y;
 					_PVR2H->RefRotQz = _RefRot.z;
 
-					_PVR2H->ZeroMotionYaw = _zeroMotionYaw;
 
-					_PVR2H->PitchInRRP = _posInRRP[0];
-					_PVR2H->RollInRRP = _posInRRP[1];
-					_PVR2H->YawInRRP = _posInRRP[2];
 				}
 			}
 
@@ -574,7 +582,7 @@ namespace vrmotioncompensation
 			if (!_PH2VR) return;
 
 			// [快照] 读取共享内存
-			MMFstruct_OVRMC_v1 localData = *_PH2VR;
+			MMFstruct_H2VR localData = *_PH2VR;
 
 			// 数据无效
 			if (localData.dataIndex <= 0) return;

@@ -124,7 +124,7 @@ namespace vrmotioncompensation
 		{
 			uint32_t clientId;
 			uint32_t messageId;			// Used to associate with Reply
-			MMFstruct_OVRMC_v1 offsets;
+			MMFstruct_H2VR offsets;
 		};
 
 		struct Request_DebugLogger_Settings

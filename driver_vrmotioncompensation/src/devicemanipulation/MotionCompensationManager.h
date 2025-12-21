@@ -122,7 +122,7 @@ namespace vrmotioncompensation
 
 			void setZeroMode(bool setZero);
 
-			void setOffsets(MMFstruct_OVRMC_v1 offsets);
+			void setOffsets(MMFstruct_H2VR offsets);
 
 			bool isZeroPoseValid();
 			
@@ -235,16 +235,16 @@ namespace vrmotioncompensation
 			boost::interprocess::windows_shared_memory _shdmemH2VR;
 			boost::interprocess::mapped_region _regionH2VR;
 			// Offset data
-			MMFstruct_OVRMC_v1 _H2VR;
-			MMFstruct_OVRMC_v1* _PH2VR = nullptr;
+			MMFstruct_H2VR _H2VR;
+			MMFstruct_H2VR* _PH2VR = nullptr;
 
 			std::string _msgH2VR;
 			//----------------------------vr2h
 
 			boost::interprocess::windows_shared_memory _shdmemVR2H;
 			boost::interprocess::mapped_region _regionVR2H;
-			MMFstruct_OVRMC_v1 _VR2H;
-			MMFstruct_OVRMC_v1* _PVR2H = nullptr;
+			MMFstruct_VR2H _VR2H;
+			MMFstruct_VR2H* _PVR2H = nullptr;
 
 			std::string _msgVR2H;
 			//----------------------------
@@ -280,6 +280,8 @@ namespace vrmotioncompensation
 			// 在 MotionCompensationManager.h 中添加以下私有变量
 			uint32_t _lastDataIndex = 0;
 			long long _lastPlatformTime = 0; // 上一次收到平台数据的时间(微秒)
+
+			vr::HmdQuaternion_t _trackWorldRot = { 1, 0, 0, 0 };
 
 
 			double _zeroMotionYaw = 0;
