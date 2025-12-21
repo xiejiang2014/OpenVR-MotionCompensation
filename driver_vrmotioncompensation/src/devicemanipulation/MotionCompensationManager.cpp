@@ -127,10 +127,10 @@ namespace vrmotioncompensation
 
 		void MotionCompensationManager::setOffsets(MMFstruct_OVRMC_v1 offsets)
 		{
-			//_H2VR.Translation = offsets.Translation;
-			//_H2VR.Rotation = offsets.Rotation;
-			//_H2VR = offsets;
-			//*_PH2VR = _H2VR;
+			_H2VR.Translation = offsets.Translation;
+			_H2VR.Rotation = offsets.Rotation;
+			_H2VR = offsets;
+			*_PH2VR = _H2VR;
 		}
 
 		bool MotionCompensationManager::isZeroPoseValid()
@@ -390,17 +390,6 @@ namespace vrmotioncompensation
 			// Save last rotation and pose
 			_RotEulerFilterOld = RotEulerFilter;
 			_RefTrackerLastPose = pose;
-
-
-			if (_TrackerPoseIndex % 10 == 0)
-			{
-				vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
-				vr::HmdVector3d_t qi = QuaternionToEulerOpenVR(_RefRotInv.w, _RefRotInv.x, _RefRotInv.y, _RefRotInv.z);
-
-				LOG(INFO) << "跟踪器补偿	|" << q.v[0]* RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|" << qi.v[0] * RadToDeg << "|" << qi.v[1] * RadToDeg << "|" << qi.v[2] * RadToDeg;
-			}
-
-			_TrackerPoseIndex++;
 		}
 
 		/// <summary>
@@ -412,7 +401,7 @@ namespace vrmotioncompensation
 		{
 			//实测如果 _Enabled 为 false ,那么根本不会走到这个函数来.
 
-			if (_Enabled)//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
+			if (_Enabled && _ZeroPoseValid && _RefPoseValid)//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
 			{
 				//LOG(INFO) << _msgH2VR;
 				//LOG(INFO) << _msgVR2H;
@@ -446,25 +435,25 @@ namespace vrmotioncompensation
 
 				//---------------------------------------------------
 
-				vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
-				if (!_ZeroPoseValid)
-				{
-					_zeroMotionYaw = headerQ.v[2];
-					//平台的pitch和roll是绝对的, 只有yaw是相对的,所以初始姿态仅记录yaw
-					_ZeroRot = vrmath::quaternionFromYawPitchRoll(_zeroMotionYaw,0,0);
-					_ZeroPoseValid = true;
-					LOG(INFO) << "updatePoseFromPlatform _zeroMotionYaw:" << (_zeroMotionYaw * RadToDeg);
-				}
+				//////vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
+				//////if (!_ZeroPoseValid)
+				//////{
+				//////	_zeroMotionYaw = headerQ.v[2];
+				//////	//平台的pitch和roll是绝对的, 只有yaw是相对的,所以初始姿态仅记录yaw
+				//////	_ZeroRot = vrmath::quaternionFromYawPitchRoll(_zeroMotionYaw,0,0);
+				//////	_ZeroPoseValid = true;
+				//////	LOG(INFO) << "updatePoseFromPlatform _zeroMotionYaw:" << (_zeroMotionYaw * RadToDeg);
+				//////}
 
 
-				try
-				{
-					updatePoseFromPlatform();
-				}
-				catch (std::exception& e)
-				{
-					LOG(ERROR) << "updatePoseFromPlatform error  " << e.what();
-				}
+				//////try
+				//////{
+				//////	updatePoseFromPlatform();
+				//////}
+				//////catch (std::exception& e)
+				//////{
+				//////	LOG(ERROR) << "updatePoseFromPlatform error  " << e.what();
+				//////}
 
 				//---------------------------------------------------
 
@@ -542,12 +531,6 @@ namespace vrmotioncompensation
 				pose.qRotation = tmpConj * compensatedPoseWorldRot;
 
 
-				//if (_MotionPoseIndex % 100 == 0)
-				//{
-				//	vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
-				//	vr::HmdVector3d_t qi = QuaternionToEulerOpenVR(_RefRotInv.w, _RefRotInv.x, _RefRotInv.y, _RefRotInv.z);
-				//	//LOG(INFO) << "MotionPose 应用补偿 	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|"  << qi.v[0] * RadToDeg << "|" << qi.v[1] * RadToDeg << "|" << qi.v[2] * RadToDeg;
-				//}
 
 
 				// convert back to driver space
@@ -555,7 +538,6 @@ namespace vrmotioncompensation
 				// SteamVR 只要 Driver Space 的数据，所以算完还得转回去。
 				//vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, true);
 				//_copyVec(pose.vecPosition, adjPoseDriverPos.v);
-				//_MotionPoseIndex++;
 
 
 				//回传头显实时姿态
