@@ -145,7 +145,7 @@ namespace vrmotioncompensation
 
 		void MotionCompensationManager::setZeroPose(const vr::DriverPose_t& pose)
 		{
-			return;
+			//return;
 
 			// convert pose from driver space to app space
 			vr::HmdQuaternion_t tmpConj = vrmath::quaternionConjugate(pose.qWorldFromDriverRotation);
@@ -435,13 +435,13 @@ namespace vrmotioncompensation
 
 				//---------------------------------------------------
 				vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
-				if (!_ZeroPoseValid)
-				{
-					_ZeroRotYaw = headerQ.v[2];
-					//平台的pitch和roll是绝对的, 只有yaw是相对的,所以ZeroRot仅记录yaw
-					_ZeroRot = vrmath::quaternionFromYawPitchRoll(_ZeroRotYaw,0,0);
-					_ZeroPoseValid = true;
-				}
+				//if (!_ZeroPoseValid)
+				//{
+				//	_ZeroRotYaw = headerQ.v[2];
+				//	//平台的pitch和roll是绝对的, 只有yaw是相对的,所以ZeroRot仅记录yaw
+				//	_ZeroRot = vrmath::quaternionFromYawPitchRoll(_ZeroRotYaw,0,0);
+				//	_ZeroPoseValid = true;
+				//}
 
 
 				try
@@ -534,8 +534,8 @@ namespace vrmotioncompensation
 				// convert back to driver space
 				// 转换回驱动坐标系 (App Space -> Driver Space):
 				// SteamVR 只要 Driver Space 的数据，所以算完还得转回去。
-				//vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, true);
-				//_copyVec(pose.vecPosition, adjPoseDriverPos.v);
+				vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, true);
+				_copyVec(pose.vecPosition, adjPoseDriverPos.v);
 
 
 				//回传头显实时姿态
@@ -546,24 +546,39 @@ namespace vrmotioncompensation
 					_PVR2H->HeaderRoty = poseWorldRot.y;
 					_PVR2H->HeaderRotz = poseWorldRot.z;
 
+					_PVR2H->HeaderPosX = poseWorldPos.v[0];
+					_PVR2H->HeaderPosY = poseWorldPos.v[1];
+					_PVR2H->HeaderPosZ = poseWorldPos.v[2];
+
+					//--------------
+
 					_PVR2H->ZeroRotW = _ZeroRot.w;
 					_PVR2H->ZeroRotX = _ZeroRot.x;
 					_PVR2H->ZeroRotY = _ZeroRot.y;
 					_PVR2H->ZeroRotZ = _ZeroRot.z;
 
+					_PVR2H->ZeroPosX = _ZeroPos.v[0];
+					_PVR2H->ZeroPosY = _ZeroPos.v[1];
+					_PVR2H->ZeroPosZ = _ZeroPos.v[2];
 
-					_PVR2H->TrackRotW = _trackWorldRot.w;
-					_PVR2H->TrackRotX = _trackWorldRot.x;
-					_PVR2H->TrackRotY = _trackWorldRot.y;
-					_PVR2H->TrackRotZ = _trackWorldRot.z;
+					//--------------
 
+					_PVR2H->TrackerRotW = _trackWorldRot.w;
+					_PVR2H->TrackerRotX = _trackWorldRot.x;
+					_PVR2H->TrackerRotY = _trackWorldRot.y;
+					_PVR2H->TrackerRotZ = _trackWorldRot.z;
+
+
+					//--------------
 
 					_PVR2H->RefRotQw = _RefRot.w;
 					_PVR2H->RefRotQx = _RefRot.x;
 					_PVR2H->RefRotQy = _RefRot.y;
 					_PVR2H->RefRotQz = _RefRot.z;
 
-
+					_PVR2H->RefPosX = _RefPos.v[0];
+					_PVR2H->RefPosY = _RefPos.v[1];
+					_PVR2H->RefPosZ = _RefPos.v[2];
 				}
 			}
 

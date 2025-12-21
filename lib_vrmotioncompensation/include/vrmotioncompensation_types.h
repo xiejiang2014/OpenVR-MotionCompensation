@@ -79,24 +79,40 @@ namespace vrmotioncompensation
 		double HeaderRoty;
 		double HeaderRotz;
 
+
+		double HeaderPosX;
+		double HeaderPosY;
+		double HeaderPosZ;
+
 		//参考起始姿态
 		double ZeroRotW;
 		double ZeroRotX;
 		double ZeroRotY;
 		double ZeroRotZ;
 
-		//追踪器实时姿态
-		double TrackRotW;
-		double TrackRotX;
-		double TrackRotY;
-		double TrackRotZ;
+		double ZeroPosX;
+		double ZeroPosY;
+		double ZeroPosZ;
 
+		//追踪器实时姿态
+		double TrackerRotW;
+		double TrackerRotX;
+		double TrackerRotY;
+		double TrackerRotZ;
+
+		double TrackerPosX;
+		double TrackerPosY;
+		double TrackerPosZ;
 
 		//补偿姿态
 		double RefRotQw;
 		double RefRotQx;
 		double RefRotQy;
 		double RefRotQz;
+
+		double RefPosX;
+		double RefPosY;
+		double RefPosZ;
 
 		double Reserved4;
 		double Reserved5;
