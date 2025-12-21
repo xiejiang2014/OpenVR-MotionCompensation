@@ -606,7 +606,11 @@ namespace vrmotioncompensation
 
 
 			//将旋转值转为4元数形式
-			vr::HmdQuaternion_t qRotation = vrmath::quaternionFromYawPitchRoll(yaw * DegToRad+ _ZeroRotYaw, pitch * DegToRad, roll * DegToRad);
+			vr::HmdQuaternion_t qRotation = vrmath::quaternionFromYawPitchRoll(
+				yaw * DegToRad+ _ZeroRotYaw,  //以初始yaw方向为yaw的0点
+				pitch * DegToRad, 
+				roll * DegToRad
+			);
 
 			_RefLock.lock();
 			_ZeroLock.lock();
@@ -617,38 +621,6 @@ namespace vrmotioncompensation
 
 			_ZeroLock.unlock();
 			_RefLock.unlock();
-
-
-			////////////旋转到头显的指向
-			//////////std::vector<float> pos_original = { (float)pitch,(float)roll,(float)yaw, (float)Sway, (float)Surge, (float)Heave };
-			//////////_rrp[2] = (float)(-_zeroMotionYaw* RadToDeg);
-			//////////_posInRRP = ProjectRotationVector(pos_original, _rrp);
-
-			////////////todo 临时屏蔽
-			////////////std::vector<float>	POSInRRP= { (float)pitch,(float)roll,(float)yaw, (float)Sway, (float)Surge, (float)Heave };
-
-			////////////if (_PlatformPoseIndex % 10 == 0)
-			////////////{
-			////////////	LOG(INFO) << "姿态转向测试	|" << pitch << "|" << roll << "|" << yaw << "|" << _rrp[2] << "|" << POSInRRP[0] << "|" << POSInRRP[1] << "|" << POSInRRP[2];
-			////////////}
-			////////////_PlatformPoseIndex++;
-
-
-			////////////单位换算  正负转换
-			//////////float pitchInRRP = _posInRRP[0] * DegToRad;		//Pitch
-			//////////float rollInRRP  = _posInRRP[1] * DegToRad;	//Roll
-			//////////float yawInRRP   = _posInRRP[2] * DegToRad;		//Yaw
-
-			//////////_posInRRP[3] = _posInRRP[3] / 1000;			//Sway
-			//////////_posInRRP[4] = _posInRRP[4] / 1000;		//Surge
-			//////////_posInRRP[5] = _posInRRP[5] / 1000;			//Heave
-
-
-			//////////////////----------------------------------------平移量
-			////////////////vr::HmdVector3d_t rawPos;
-			////////////////rawPos.v[0] = _posInRRP[3];
-			////////////////rawPos.v[1] = _posInRRP[5];
-			////////////////rawPos.v[2] = _posInRRP[4];
 
 			//////////////////----------------------------------------旋转量
 
