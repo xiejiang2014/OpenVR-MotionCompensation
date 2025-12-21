@@ -282,9 +282,6 @@ namespace vrmotioncompensation
 			long long _lastPlatformTime = 0; // 上一次收到平台数据的时间(微秒)
 
 
-			vr::HmdQuaternion_t _zeroMotionRot = { 0, 0, 0 };
-			vr::HmdQuaternion_t _zeroMotionRotYawOnly = { 0, 0, 0 };
-			vr::HmdQuaternion_t _zeroMotionRotYawOnlyInv = { 0, 0, 0 };
 			double _zeroMotionYaw = 0;
 			bool _zeroMotionRotValid = false;
 

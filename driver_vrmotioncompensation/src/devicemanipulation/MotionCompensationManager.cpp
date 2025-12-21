@@ -145,6 +145,8 @@ namespace vrmotioncompensation
 
 		void MotionCompensationManager::setZeroPose(const vr::DriverPose_t& pose)
 		{
+			//return;
+
 			// convert pose from driver space to app space
 			vr::HmdQuaternion_t tmpConj = vrmath::quaternionConjugate(pose.qWorldFromDriverRotation);
 
@@ -209,7 +211,7 @@ namespace vrmotioncompensation
 		/// <param name="pose"></param>
 		void MotionCompensationManager::updateRefPose(const vr::DriverPose_t& pose)
 		{
-			return; //禁用此函数
+			//return; //禁用此函数
 
 			// From https://github.com/ValveSoftware/driver_hydra/blob/master/drivers/driver_hydra/driver_hydra.cpp Line 835:
 			// "True acceleration is highly volatile, so it's not really reasonable to
@@ -343,12 +345,12 @@ namespace vrmotioncompensation
 			}
 
 			// calculate orientation difference and its inverse
-		// _ZeroRot: 动感座椅静止归零时的旋转角度（基准）。
-		//	poseWorldRot : 动感座椅现在的旋转角度。
-		//	_RefRot : 现在的角度相对于基准角度转了多少。
-		//	_RefRotInv : _RefRot 的逆（Inverse）。
-		//	意义：如果座椅向左转了 10 度，_RefRotInv 就是“向右转 10 度”。
-		//	后续：这个逆旋转将被应用到头显上，从而抵消掉座椅的运动。
+			// _ZeroRot: 动感座椅静止归零时的旋转角度（基准）。
+			//	poseWorldRot : 动感座椅现在的旋转角度。
+			//	_RefRot : 现在的角度相对于基准角度转了多少。
+			//	_RefRotInv : _RefRot 的逆（Inverse）。
+			//	意义：如果座椅向左转了 10 度，_RefRotInv 就是“向右转 10 度”。
+			//	后续：这个逆旋转将被应用到头显上，从而抵消掉座椅的运动。
 
 			vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * _Filter_rotPosition[1];
 			_RefLock.lock();
@@ -445,13 +447,12 @@ namespace vrmotioncompensation
 				//---------------------------------------------------
 
 				vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
-				if (!_zeroMotionRotValid)
+				if (!_ZeroPoseValid)
 				{
-					_zeroMotionRot = poseWorldRot;
 					_zeroMotionYaw = headerQ.v[2];
-					_zeroMotionRotYawOnly = vrmath::quaternionFromYawPitchRoll(_zeroMotionYaw,0,0);
-					_zeroMotionRotYawOnlyInv = vrmath::quaternionConjugate(_zeroMotionRotYawOnly);
-					_zeroMotionRotValid = true;
+					//平台的pitch和roll是绝对的, 只有yaw是相对的,所以初始姿态仅记录yaw
+					_ZeroRot = vrmath::quaternionFromYawPitchRoll(_zeroMotionYaw,0,0);
+					_ZeroPoseValid = true;
 					LOG(INFO) << "updatePoseFromPlatform _zeroMotionYaw:" << (_zeroMotionYaw * RadToDeg);
 				}
 
@@ -541,12 +542,12 @@ namespace vrmotioncompensation
 				pose.qRotation = tmpConj * compensatedPoseWorldRot;
 
 
-				if (_MotionPoseIndex % 100 == 0)
-				{
-					vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
-					vr::HmdVector3d_t qi = QuaternionToEulerOpenVR(_RefRotInv.w, _RefRotInv.x, _RefRotInv.y, _RefRotInv.z);
-					//LOG(INFO) << "MotionPose 应用补偿 	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|"  << qi.v[0] * RadToDeg << "|" << qi.v[1] * RadToDeg << "|" << qi.v[2] * RadToDeg;
-				}
+				//if (_MotionPoseIndex % 100 == 0)
+				//{
+				//	vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
+				//	vr::HmdVector3d_t qi = QuaternionToEulerOpenVR(_RefRotInv.w, _RefRotInv.x, _RefRotInv.y, _RefRotInv.z);
+				//	//LOG(INFO) << "MotionPose 应用补偿 	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|"  << qi.v[0] * RadToDeg << "|" << qi.v[1] * RadToDeg << "|" << qi.v[2] * RadToDeg;
+				//}
 
 
 				// convert back to driver space
@@ -554,7 +555,7 @@ namespace vrmotioncompensation
 				// SteamVR 只要 Driver Space 的数据，所以算完还得转回去。
 				//vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, true);
 				//_copyVec(pose.vecPosition, adjPoseDriverPos.v);
-				_MotionPoseIndex++;
+				//_MotionPoseIndex++;
 
 
 				//回传头显实时姿态
@@ -585,9 +586,9 @@ namespace vrmotioncompensation
 
 		void MotionCompensationManager::updatePoseFromPlatform()
 		{
-			//return;
+			return;
 
-			// [检查 1] 空指针与数据有效性
+			// 没有开启内存共享通道则不反应
 			if (!_PH2VR) return;
 
 			// [快照] 读取共享内存
@@ -603,11 +604,10 @@ namespace vrmotioncompensation
 			if (indexDiff == 0 && _lastDataIndex != 0)
 			{
 				_RefPoseValid = true;
-				_ZeroPoseValid = true;
 				return;
 			}
 
-
+			//传过来的原始数据调整方向
 			double pitch = localData.Rotation.v[0];//角度
 			double roll  = -localData.Rotation.v[1];//角度
 			double yaw   = localData.Rotation.v[2];//角度
@@ -616,11 +616,19 @@ namespace vrmotioncompensation
 			double Surge = -localData.Translation.v[2];//米
 
 
-			//将平台旋转转为4原数
-			vr::HmdQuaternion_t motionRot = vrmath::quaternionFromYawPitchRoll(yaw * DegToRad, pitch * DegToRad, roll * DegToRad);
+			//将旋转值转为4元数形式
+			vr::HmdQuaternion_t qRotation = vrmath::quaternionFromYawPitchRoll(yaw * DegToRad, pitch * DegToRad, roll * DegToRad);
 
-			//将平台旋转的yaw旋转头显初始yaw值
-			vr::HmdQuaternion_t qRotation = _zeroMotionRotYawOnly* motionRot;
+			_RefLock.lock();
+			_ZeroLock.lock();
+
+			//计算“相对偏移”
+			_RefRot = qRotation * vrmath::quaternionConjugate(_ZeroRot);
+			_RefRotInv = vrmath::quaternionConjugate(_RefRot);
+
+			_ZeroLock.unlock();
+			_RefLock.unlock();
+
 
 			////////////旋转到头显的指向
 			//////////std::vector<float> pos_original = { (float)pitch,(float)roll,(float)yaw, (float)Sway, (float)Surge, (float)Heave };
@@ -647,175 +655,175 @@ namespace vrmotioncompensation
 			//////////_posInRRP[5] = _posInRRP[5] / 1000;			//Heave
 
 
-			//----------------------------------------平移量
-			vr::HmdVector3d_t rawPos;
-			rawPos.v[0] = _posInRRP[3];
-			rawPos.v[1] = _posInRRP[5];
-			rawPos.v[2] = _posInRRP[4];
+			//////////////////----------------------------------------平移量
+			////////////////vr::HmdVector3d_t rawPos;
+			////////////////rawPos.v[0] = _posInRRP[3];
+			////////////////rawPos.v[1] = _posInRRP[5];
+			////////////////rawPos.v[2] = _posInRRP[4];
 
-			//----------------------------------------旋转量
+			//////////////////----------------------------------------旋转量
 
-			//得到旋转后的旋转四元数
-			//vr::HmdQuaternion_t  qRotation = vrmath::quaternionFromYawPitchRoll(yawInRRP, pitchInRRP, rollInRRP);
+			//////////////////得到旋转后的旋转四元数
+			//////////////////vr::HmdQuaternion_t  qRotation = vrmath::quaternionFromYawPitchRoll(yawInRRP, pitchInRRP, rollInRRP);
 
-			//if (_PlatformPoseIndex % 10 == 0)
-			//{
-			//	vr::HmdVector3d_t eulerAngles= QuaternionToEulerOpenVR(qRotation.w, qRotation.x, qRotation.y, qRotation.z);
-			//	LOG(INFO) << "四元数转换测试	|" << yawInRRP << "|" << pitchInRRP << "|" << rollInRRP << "|"  << eulerAngles.v[2] << "|" << eulerAngles.v[1] << "|" << eulerAngles.v[1];
-			//}
-			//_PlatformPoseIndex++;
-			
+			//////////////////if (_PlatformPoseIndex % 10 == 0)
+			//////////////////{
+			//////////////////	vr::HmdVector3d_t eulerAngles= QuaternionToEulerOpenVR(qRotation.w, qRotation.x, qRotation.y, qRotation.z);
+			//////////////////	LOG(INFO) << "四元数转换测试	|" << yawInRRP << "|" << pitchInRRP << "|" << rollInRRP << "|"  << eulerAngles.v[2] << "|" << eulerAngles.v[1] << "|" << eulerAngles.v[1];
+			//////////////////}
+			//////////////////_PlatformPoseIndex++;
+			////////////////
 
-			// -----------2提取并清洗数据 (无论是否复位，都需要提取位置和旋转)
+			////////////////// -----------2提取并清洗数据 (无论是否复位，都需要提取位置和旋转)
 
-			vr::HmdQuaternion_t rawRot;
+			////////////////vr::HmdQuaternion_t rawRot;
 
-			if (qRotation.w == 0 && qRotation.x == 0 && qRotation.y == 0 && qRotation.z == 0)
-			{
-				rawRot = { 1.0, 0.0, 0.0, 0.0 };
-			}
-			else
-			{
-				rawRot.w = qRotation.w;
-				rawRot.x = qRotation.x;
-				rawRot.y = qRotation.y;
-				rawRot.z = qRotation.z;
+			////////////////if (qRotation.w == 0 && qRotation.x == 0 && qRotation.y == 0 && qRotation.z == 0)
+			////////////////{
+			////////////////	rawRot = { 1.0, 0.0, 0.0, 0.0 };
+			////////////////}
+			////////////////else
+			////////////////{
+			////////////////	rawRot.w = qRotation.w;
+			////////////////	rawRot.x = qRotation.x;
+			////////////////	rawRot.y = qRotation.y;
+			////////////////	rawRot.z = qRotation.z;
 
-				// [保持] 归一化四元数
-				double mag = sqrt(rawRot.w * rawRot.w + rawRot.x * rawRot.x + rawRot.y * rawRot.y + rawRot.z * rawRot.z);
-				if (mag > 0.00001) {
-					rawRot.w /= mag; rawRot.x /= mag; rawRot.y /= mag; rawRot.z /= mag;
-				}
-			}
+			////////////////	// [保持] 归一化四元数
+			////////////////	double mag = sqrt(rawRot.w * rawRot.w + rawRot.x * rawRot.x + rawRot.y * rawRot.y + rawRot.z * rawRot.z);
+			////////////////	if (mag > 0.00001) {
+			////////////////		rawRot.w /= mag; rawRot.x /= mag; rawRot.y /= mag; rawRot.z /= mag;
+			////////////////	}
+			////////////////}
 
-			// [保持] 四元数连续性检查
-			// 如果是复位情况(indexDiff < 0)，其实不需要做连续性检查，
-			// 但为了代码简洁，且 rawRot 翻转不影响单帧姿态，保留此处也无妨。
-			if (_lastDataIndex != 0)
-			{
-				double dot = rawRot.w * _lastPlatformRot.w + rawRot.x * _lastPlatformRot.x +
-					rawRot.y * _lastPlatformRot.y + rawRot.z * _lastPlatformRot.z;
+			////////////////// [保持] 四元数连续性检查
+			////////////////// 如果是复位情况(indexDiff < 0)，其实不需要做连续性检查，
+			////////////////// 但为了代码简洁，且 rawRot 翻转不影响单帧姿态，保留此处也无妨。
+			////////////////if (_lastDataIndex != 0)
+			////////////////{
+			////////////////	double dot = rawRot.w * _lastPlatformRot.w + rawRot.x * _lastPlatformRot.x +
+			////////////////		rawRot.y * _lastPlatformRot.y + rawRot.z * _lastPlatformRot.z;
 
-				if (dot < 0)
-				{
-					rawRot.w = -rawRot.w;
-					rawRot.x = -rawRot.x;
-					rawRot.y = -rawRot.y;
-					rawRot.z = -rawRot.z;
-				}
-			}
+			////////////////	if (dot < 0)
+			////////////////	{
+			////////////////		rawRot.w = -rawRot.w;
+			////////////////		rawRot.x = -rawRot.x;
+			////////////////		rawRot.y = -rawRot.y;
+			////////////////		rawRot.z = -rawRot.z;
+			////////////////	}
+			////////////////}
 
-			// -----------3计算物理属性 (速度 & 加速度)	初始化为 0。如果发生复位(indexDiff < 0)，则不会进入下面的计算块，保持为 0。
-			vr::HmdVector3d_t currVel = { 0, 0, 0 };
-			vr::HmdVector3d_t currAcc = { 0, 0, 0 };
-			vr::HmdVector3d_t currAngVel = { 0, 0, 0 };
-			vr::HmdVector3d_t currAngAcc = { 0, 0, 0 };
+			////////////////// -----------3计算物理属性 (速度 & 加速度)	初始化为 0。如果发生复位(indexDiff < 0)，则不会进入下面的计算块，保持为 0。
+			////////////////vr::HmdVector3d_t currVel = { 0, 0, 0 };
+			////////////////vr::HmdVector3d_t currAcc = { 0, 0, 0 };
+			////////////////vr::HmdVector3d_t currAngVel = { 0, 0, 0 };
+			////////////////vr::HmdVector3d_t currAngAcc = { 0, 0, 0 };
 
-			// 仅当 数据是递增的 (indexDiff > 0) 且 不是第一帧 (_lastDataIndex != 0) 时计算物理属性
-			if (indexDiff > 0 && _lastDataIndex != 0)
-			{
-				// 使用 DataIndex 计算精确时间差 (100Hz = 0.01秒)
-				double tdiff = (double)indexDiff * 0.01;
-				// 防御性检查
-				if (tdiff < 0.00001) tdiff = 0.01;
+			////////////////// 仅当 数据是递增的 (indexDiff > 0) 且 不是第一帧 (_lastDataIndex != 0) 时计算物理属性
+			////////////////if (indexDiff > 0 && _lastDataIndex != 0)
+			////////////////{
+			////////////////	// 使用 DataIndex 计算精确时间差 (100Hz = 0.01秒)
+			////////////////	double tdiff = (double)indexDiff * 0.01;
+			////////////////	// 防御性检查
+			////////////////	if (tdiff < 0.00001) tdiff = 0.01;
 
-				// [保持] 位置死区 (消除静止抖动)
-				double distSq =
-					pow(rawPos.v[0] - _lastPlatformPos.v[0], 2) +
-					pow(rawPos.v[1] - _lastPlatformPos.v[1], 2) +
-					pow(rawPos.v[2] - _lastPlatformPos.v[2], 2);
+			////////////////	// [保持] 位置死区 (消除静止抖动)
+			////////////////	double distSq =
+			////////////////		pow(rawPos.v[0] - _lastPlatformPos.v[0], 2) +
+			////////////////		pow(rawPos.v[1] - _lastPlatformPos.v[1], 2) +
+			////////////////		pow(rawPos.v[2] - _lastPlatformPos.v[2], 2);
 
-				// 死区阈值：0.0001米 (0.1mm)
-				if (distSq > 1.0e-8)
-				{
-					currVel = { 0, 0, 0 }; // <--- 强制为 0
-					currAcc = { 0, 0, 0 };
+			////////////////	// 死区阈值：0.0001米 (0.1mm)
+			////////////////	if (distSq > 1.0e-8)
+			////////////////	{
+			////////////////		currVel = { 0, 0, 0 }; // <--- 强制为 0
+			////////////////		currAcc = { 0, 0, 0 };
 
-					//currVel.v[0] = (rawPos.v[0] - _lastPlatformPos.v[0]) / tdiff;
-					//currVel.v[1] = (rawPos.v[1] - _lastPlatformPos.v[1]) / tdiff;
-					//currVel.v[2] = (rawPos.v[2] - _lastPlatformPos.v[2]) / tdiff;
+			////////////////		//currVel.v[0] = (rawPos.v[0] - _lastPlatformPos.v[0]) / tdiff;
+			////////////////		//currVel.v[1] = (rawPos.v[1] - _lastPlatformPos.v[1]) / tdiff;
+			////////////////		//currVel.v[2] = (rawPos.v[2] - _lastPlatformPos.v[2]) / tdiff;
 
-					//currAcc.v[0] = (currVel.v[0] - _lastPlatformVel.v[0]) / tdiff;
-					//currAcc.v[1] = (currVel.v[1] - _lastPlatformVel.v[1]) / tdiff;
-					//currAcc.v[2] = (currVel.v[2] - _lastPlatformVel.v[2]) / tdiff;
-				}
+			////////////////		//currAcc.v[0] = (currVel.v[0] - _lastPlatformVel.v[0]) / tdiff;
+			////////////////		//currAcc.v[1] = (currVel.v[1] - _lastPlatformVel.v[1]) / tdiff;
+			////////////////		//currAcc.v[2] = (currVel.v[2] - _lastPlatformVel.v[2]) / tdiff;
+			////////////////	}
 
-				// [保持] 旋转死区
-				double rotDiffSq =
-					pow(rawRot.w - _lastPlatformRot.w, 2) +
-					pow(rawRot.x - _lastPlatformRot.x, 2) +
-					pow(rawRot.y - _lastPlatformRot.y, 2) +
-					pow(rawRot.z - _lastPlatformRot.z, 2);
+			////////////////	// [保持] 旋转死区
+			////////////////	double rotDiffSq =
+			////////////////		pow(rawRot.w - _lastPlatformRot.w, 2) +
+			////////////////		pow(rawRot.x - _lastPlatformRot.x, 2) +
+			////////////////		pow(rawRot.y - _lastPlatformRot.y, 2) +
+			////////////////		pow(rawRot.z - _lastPlatformRot.z, 2);
 
-				if (rotDiffSq > 1.0e-8)
-				{
-					vr::HmdVector3d_t eulerNow = toEulerAngles(rawRot);
-					vr::HmdVector3d_t eulerOld = toEulerAngles(_lastPlatformRot);
+			////////////////	if (rotDiffSq > 1.0e-8)
+			////////////////	{
+			////////////////		vr::HmdVector3d_t eulerNow = toEulerAngles(rawRot);
+			////////////////		vr::HmdVector3d_t eulerOld = toEulerAngles(_lastPlatformRot);
 
-					currAngVel = { 0, 0, 0 }; // <--- 强制为 0
-					currAngAcc = { 0, 0, 0 };
+			////////////////		currAngVel = { 0, 0, 0 }; // <--- 强制为 0
+			////////////////		currAngAcc = { 0, 0, 0 };
 
-					//currAngVel.v[0] = rotVelocity(tdiff, eulerNow.v[0], eulerOld.v[0]);
-					//currAngVel.v[1] = rotVelocity(tdiff, eulerNow.v[1], eulerOld.v[1]);
-					//currAngVel.v[2] = rotVelocity(tdiff, eulerNow.v[2], eulerOld.v[2]);
+			////////////////		//currAngVel.v[0] = rotVelocity(tdiff, eulerNow.v[0], eulerOld.v[0]);
+			////////////////		//currAngVel.v[1] = rotVelocity(tdiff, eulerNow.v[1], eulerOld.v[1]);
+			////////////////		//currAngVel.v[2] = rotVelocity(tdiff, eulerNow.v[2], eulerOld.v[2]);
 
-					//currAngAcc.v[0] = (currAngVel.v[0] - _lastPlatformAngVel.v[0]) / tdiff;
-					//currAngAcc.v[1] = (currAngVel.v[1] - _lastPlatformAngVel.v[1]) / tdiff;
-					//currAngAcc.v[2] = (currAngVel.v[2] - _lastPlatformAngVel.v[2]) / tdiff;
-				}
-			}
-			// else { // 这里隐含处理了 indexDiff < 0 的情况：
-				 // 变量 currVel 等保持初始化时的 {0,0,0}，
-				 // 实现了“复位时不计算疯狂的速度”这一目标。
-			// }
+			////////////////		//currAngAcc.v[0] = (currAngVel.v[0] - _lastPlatformAngVel.v[0]) / tdiff;
+			////////////////		//currAngAcc.v[1] = (currAngVel.v[1] - _lastPlatformAngVel.v[1]) / tdiff;
+			////////////////		//currAngAcc.v[2] = (currAngVel.v[2] - _lastPlatformAngVel.v[2]) / tdiff;
+			////////////////	}
+			////////////////}
+			////////////////// else { // 这里隐含处理了 indexDiff < 0 的情况：
+			////////////////	 // 变量 currVel 等保持初始化时的 {0,0,0}，
+			////////////////	 // 实现了“复位时不计算疯狂的速度”这一目标。
+			////////////////// }
 
-			// -----------4. 更新 _Ref 变量 (线程安全)
-			_RefLock.lock();
-			_ZeroLock.lock();
-			_RefVelLock.lock();
+			////////////////// -----------4. 更新 _Ref 变量 (线程安全)
+			////////////////_RefLock.lock();
+			////////////////_ZeroLock.lock();
+			////////////////_RefVelLock.lock();
 
-			// 设置参考数据 (无论是否复位，当前位置都是准确的)
-			_RefPos = rawPos;
-			_RefRot = rawRot * vrmath::quaternionConjugate(_ZeroRot);
-			_RefRotInv = vrmath::quaternionConjugate(_RefRot);
+			////////////////// 设置参考数据 (无论是否复位，当前位置都是准确的)
+			////////////////_RefPos = rawPos;
+			//////////////////_RefRot = rawRot * vrmath::quaternionConjugate(_ZeroRot);
+			//////////////////_RefRotInv = vrmath::quaternionConjugate(_RefRot);
 
-			// 设置物理数据 (如果是复位，这里全是 0，符合预期)
-			_RefVel = currVel;
-			_RefAcc = currAcc;
-			_RefRotVel = currAngVel;
-			_RefRotAcc = currAngAcc;
+			////////////////// 设置物理数据 (如果是复位，这里全是 0，符合预期)
+			////////////////_RefVel = currVel;
+			////////////////_RefAcc = currAcc;
+			////////////////_RefRotVel = currAngVel;
+			////////////////_RefRotAcc = currAngAcc;
 
-			_RefVelLock.unlock();
-			_ZeroLock.unlock();
-			_RefLock.unlock();
+			////////////////_RefVelLock.unlock();
+			////////////////_ZeroLock.unlock();
+			////////////////_RefLock.unlock();
 
-			// -----------5. 更新缓存
-			_lastDataIndex = localData.dataIndex;
-			_lastPlatformPos = rawPos;
-			_lastPlatformVel = currVel;
-			_lastPlatformRot = rawRot;
-			_lastPlatformAngVel = currAngVel;
+			////////////////// -----------5. 更新缓存
+			////////////////_lastPlatformPos = rawPos;
+			////////////////_lastPlatformVel = currVel;
+			////////////////_lastPlatformRot = rawRot;
+			////////////////_lastPlatformAngVel = currAngVel;
 
 			_RefPoseValid = true;
 
-			if (_PlatformPoseIndex % 10 == 0)
-			{
-				vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
+			////////////////if (_PlatformPoseIndex % 10 == 0)
+			////////////////{
+			////////////////	vr::HmdVector3d_t q = QuaternionToEulerOpenVR(_RefRot.w, _RefRot.x, _RefRot.y, _RefRot.z);
 
-				//LOG(INFO) << "平台补偿结果	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|" << pitch << "|" << roll << "|" << yaw << "|" << _rrp[2] << "|" << POSInRRP[0] << "|" << POSInRRP[1] << "|" << POSInRRP[2];
-				//LOG(INFO) << "PlatformPose _RefRot	|" << pitch << "|" << roll << "|" << yaw << "|" << 0-_zeroMotionYaw * RadToDeg << "|" << poseInRRP[0] << "|" << poseInRRP[1] << "|" << poseInRRP[2];
-			
-			
+			////////////////	//LOG(INFO) << "平台补偿结果	|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|" << pitch << "|" << roll << "|" << yaw << "|" << _rrp[2] << "|" << POSInRRP[0] << "|" << POSInRRP[1] << "|" << POSInRRP[2];
+			////////////////	//LOG(INFO) << "PlatformPose _RefRot	|" << pitch << "|" << roll << "|" << yaw << "|" << 0-_zeroMotionYaw * RadToDeg << "|" << poseInRRP[0] << "|" << poseInRRP[1] << "|" << poseInRRP[2];
+			////////////////
+			////////////////
 
 
-				//LOG(INFO) << "正四元|" << _RefRot.w << "|" << _RefRot.x << "|" << _RefRot.y << "|" << _RefRot.z ;
-				//LOG(INFO) << "逆四元|" << _RefRotInv.w << "|" << _RefRotInv.x << "|" << _RefRotInv.y << "|" << _RefRotInv.z;
-				//vr::HmdVector3d_t q2 = QuaternionToEulerOpenVR(_RefRotInv.w, _RefRotInv.x, _RefRotInv.y, _RefRotInv.z);
-				//LOG(INFO) << "正逆检查(弧度)|" << q.v[0]  << "|" << q.v[1]  << "|" << q.v[2]  << "|" << q2.v[0]  << "|" << q2.v[1]  << "|" << q2.v[2] ;
-				//LOG(INFO) << "正逆检查(角度)|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|" << q2.v[0] * RadToDeg << "|" << q2.v[1] * RadToDeg << "|" << q2.v[2] * RadToDeg;
+			////////////////	//LOG(INFO) << "正四元|" << _RefRot.w << "|" << _RefRot.x << "|" << _RefRot.y << "|" << _RefRot.z ;
+			////////////////	//LOG(INFO) << "逆四元|" << _RefRotInv.w << "|" << _RefRotInv.x << "|" << _RefRotInv.y << "|" << _RefRotInv.z;
+			////////////////	//vr::HmdVector3d_t q2 = QuaternionToEulerOpenVR(_RefRotInv.w, _RefRotInv.x, _RefRotInv.y, _RefRotInv.z);
+			////////////////	//LOG(INFO) << "正逆检查(弧度)|" << q.v[0]  << "|" << q.v[1]  << "|" << q.v[2]  << "|" << q2.v[0]  << "|" << q2.v[1]  << "|" << q2.v[2] ;
+			////////////////	//LOG(INFO) << "正逆检查(角度)|" << q.v[0] * RadToDeg << "|" << q.v[1] * RadToDeg << "|" << q.v[2] * RadToDeg << "|" << q2.v[0] * RadToDeg << "|" << q2.v[1] * RadToDeg << "|" << q2.v[2] * RadToDeg;
 
-			}
-			_PlatformPoseIndex++;
+			////////////////}
+			////////////////_PlatformPoseIndex++;
+			_lastDataIndex = localData.dataIndex;
 		}
 
 		void MotionCompensationManager::runFrame()
