@@ -211,7 +211,7 @@ namespace vrmotioncompensation
 		/// <param name="pose"></param>
 		void MotionCompensationManager::updateRefPose(const vr::DriverPose_t& pose)
 		{
-			return; //禁用此函数
+			//return; //禁用此函数
 
 			// From https://github.com/ValveSoftware/driver_hydra/blob/master/drivers/driver_hydra/driver_hydra.cpp Line 835:
 			// "True acceleration is highly volatile, so it's not really reasonable to
@@ -400,8 +400,8 @@ namespace vrmotioncompensation
 		bool MotionCompensationManager::applyMotionCompensation(vr::DriverPose_t& pose)
 		{
 			//实测如果 _Enabled 为 false ,那么根本不会走到这个函数来.
-//&& _ZeroPoseValid && _RefPoseValid
-			if (_Enabled )//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
+//
+			if (_Enabled && _ZeroPoseValid && _RefPoseValid)//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
 			{
 				//LOG(INFO) << _msgH2VR;
 				//LOG(INFO) << _msgVR2H;
@@ -434,12 +434,11 @@ namespace vrmotioncompensation
 
 
 				//---------------------------------------------------
-
 				vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
 				if (!_ZeroPoseValid)
 				{
 					_ZeroRotYaw = headerQ.v[2];
-					//平台的pitch和roll是绝对的, 只有yaw是相对的,所以初始姿态仅记录yaw
+					//平台的pitch和roll是绝对的, 只有yaw是相对的,所以ZeroRot仅记录yaw
 					_ZeroRot = vrmath::quaternionFromYawPitchRoll(_ZeroRotYaw,0,0);
 					_ZeroPoseValid = true;
 				}
