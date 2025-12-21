@@ -315,12 +315,12 @@ namespace vrmotioncompensation
 			}
 
 			// calculate orientation difference and its inverse
-		// _ZeroRot: 动感座椅静止归零时的旋转角度（基准）。
-		//	poseWorldRot : 动感座椅现在的旋转角度。
-		//	_RefRot : 现在的角度相对于基准角度转了多少。
-		//	_RefRotInv : _RefRot 的逆（Inverse）。
-		//	意义：如果座椅向左转了 10 度，_RefRotInv 就是“向右转 10 度”。
-		//	后续：这个逆旋转将被应用到头显上，从而抵消掉座椅的运动。
+			// _ZeroRot: 动感座椅静止归零时的旋转角度（基准）。
+			//	poseWorldRot : 动感座椅现在的旋转角度。
+			//	_RefRot : 现在的角度相对于基准角度转了多少。
+			//	_RefRotInv : _RefRot 的逆（Inverse）。
+			//	意义：如果座椅向左转了 10 度，_RefRotInv 就是“向右转 10 度”。
+			//	后续：这个逆旋转将被应用到头显上，从而抵消掉座椅的运动。
 
 			vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * _Filter_rotPosition[1];
 			_RefLock.lock();
