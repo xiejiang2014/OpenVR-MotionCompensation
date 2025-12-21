@@ -254,6 +254,7 @@ namespace vrmotioncompensation
 			// Zero position
 			vr::HmdVector3d_t _ZeroPos = { 0, 0, 0 };
 			vr::HmdQuaternion_t _ZeroRot = { 1, 0, 0, 0 };
+			double _ZeroRotYaw = 0;
 			bool _ZeroPoseValid = false;
 			
 			// Reference position
@@ -284,7 +285,6 @@ namespace vrmotioncompensation
 			vr::HmdQuaternion_t _trackWorldRot = { 1, 0, 0, 0 };
 
 
-			double _zeroMotionYaw = 0;
 			bool _zeroMotionRotValid = false;
 
 			// 用于计算速度和加速度的“上一帧”缓存

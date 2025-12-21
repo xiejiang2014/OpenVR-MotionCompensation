@@ -145,7 +145,7 @@ namespace vrmotioncompensation
 
 		void MotionCompensationManager::setZeroPose(const vr::DriverPose_t& pose)
 		{
-			//return;
+			return;
 
 			// convert pose from driver space to app space
 			vr::HmdQuaternion_t tmpConj = vrmath::quaternionConjugate(pose.qWorldFromDriverRotation);
@@ -211,7 +211,7 @@ namespace vrmotioncompensation
 		/// <param name="pose"></param>
 		void MotionCompensationManager::updateRefPose(const vr::DriverPose_t& pose)
 		{
-			//return; //禁用此函数
+			return; //禁用此函数
 
 			// From https://github.com/ValveSoftware/driver_hydra/blob/master/drivers/driver_hydra/driver_hydra.cpp Line 835:
 			// "True acceleration is highly volatile, so it's not really reasonable to
@@ -400,8 +400,8 @@ namespace vrmotioncompensation
 		bool MotionCompensationManager::applyMotionCompensation(vr::DriverPose_t& pose)
 		{
 			//实测如果 _Enabled 为 false ,那么根本不会走到这个函数来.
-
-			if (_Enabled && _ZeroPoseValid && _RefPoseValid)//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
+//&& _ZeroPoseValid && _RefPoseValid
+			if (_Enabled )//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
 			{
 				//LOG(INFO) << _msgH2VR;
 				//LOG(INFO) << _msgVR2H;
@@ -435,25 +435,24 @@ namespace vrmotioncompensation
 
 				//---------------------------------------------------
 
-				//////vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
-				//////if (!_ZeroPoseValid)
-				//////{
-				//////	_zeroMotionYaw = headerQ.v[2];
-				//////	//平台的pitch和roll是绝对的, 只有yaw是相对的,所以初始姿态仅记录yaw
-				//////	_ZeroRot = vrmath::quaternionFromYawPitchRoll(_zeroMotionYaw,0,0);
-				//////	_ZeroPoseValid = true;
-				//////	LOG(INFO) << "updatePoseFromPlatform _zeroMotionYaw:" << (_zeroMotionYaw * RadToDeg);
-				//////}
+				vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
+				if (!_ZeroPoseValid)
+				{
+					_ZeroRotYaw = headerQ.v[2];
+					//平台的pitch和roll是绝对的, 只有yaw是相对的,所以初始姿态仅记录yaw
+					_ZeroRot = vrmath::quaternionFromYawPitchRoll(_ZeroRotYaw,0,0);
+					_ZeroPoseValid = true;
+				}
 
 
-				//////try
-				//////{
-				//////	updatePoseFromPlatform();
-				//////}
-				//////catch (std::exception& e)
-				//////{
-				//////	LOG(ERROR) << "updatePoseFromPlatform error  " << e.what();
-				//////}
+				try
+				{
+					updatePoseFromPlatform();
+				}
+				catch (std::exception& e)
+				{
+					LOG(ERROR) << "updatePoseFromPlatform error  " << e.what();
+				}
 
 				//---------------------------------------------------
 
@@ -576,7 +575,7 @@ namespace vrmotioncompensation
 
 		void MotionCompensationManager::updatePoseFromPlatform()
 		{
-			return;
+			//return;
 
 			// 没有开启内存共享通道则不反应
 			if (!_PH2VR) return;
@@ -607,7 +606,7 @@ namespace vrmotioncompensation
 
 
 			//将旋转值转为4元数形式
-			vr::HmdQuaternion_t qRotation = vrmath::quaternionFromYawPitchRoll(yaw * DegToRad, pitch * DegToRad, roll * DegToRad);
+			vr::HmdQuaternion_t qRotation = vrmath::quaternionFromYawPitchRoll(yaw * DegToRad+ _ZeroRotYaw, pitch * DegToRad, roll * DegToRad);
 
 			_RefLock.lock();
 			_ZeroLock.lock();
