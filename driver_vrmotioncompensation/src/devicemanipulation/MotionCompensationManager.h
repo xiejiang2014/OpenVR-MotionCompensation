@@ -254,6 +254,7 @@ namespace vrmotioncompensation
 			// Zero position
 			vr::HmdVector3d_t _ZeroPos = { 0, 0, 0 };
 			vr::HmdQuaternion_t _ZeroRot = { 1, 0, 0, 0 };
+			vr::HmdQuaternion_t _ZeroRotInv = { 1, 0, 0, 0 };
 			double _ZeroRotYaw = 0;
 			bool _ZeroPoseValid = false;
 			

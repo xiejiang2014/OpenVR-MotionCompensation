@@ -438,8 +438,11 @@ namespace vrmotioncompensation
 				//if (!_ZeroPoseValid)
 				//{
 				//	_ZeroRotYaw = headerQ.v[2];
+				//  //重点: 这里假设开启补偿的时候头显的正前方表示运动平台的正前方.
+				//  //在openvr中,b传感器所在的方向才是正前方,所以把头显此时的yaw记录下载,作为初始旋转角度.
 				//	//平台的pitch和roll是绝对的, 只有yaw是相对的,所以ZeroRot仅记录yaw
 				//	_ZeroRot = vrmath::quaternionFromYawPitchRoll(_ZeroRotYaw,0,0);
+				//	_ZeroRotInv = vrmath::quaternionConjugate(_ZeroRot);
 				//	_ZeroPoseValid = true;
 				//}
 
@@ -611,14 +614,14 @@ namespace vrmotioncompensation
 			}
 
 			//传过来的原始数据调整方向
-			double pitch = localData.Rotation.v[0];//角度
+			double pitch =  localData.Rotation.v[0];//角度
 			double roll  = -localData.Rotation.v[1];//角度
-			double yaw   = localData.Rotation.v[2];//角度
-			double Sway  = localData.Translation.v[0];//米
-			double Heave = localData.Translation.v[1];//米
-			double Surge = -localData.Translation.v[2];//米
+			double yaw   =  localData.Rotation.v[2];//角度
+			double Sway  =  localData.Translation.v[0]	/ 1000;//米
+			double Heave =  localData.Translation.v[1]	/ 1000;//米
+			double Surge = -localData.Translation.v[2]	/ 1000;//米
 
-
+			//-------------------------------------------------------计算旋转补偿
 			//将旋转值转为4元数形式
 			vr::HmdQuaternion_t qRotation = vrmath::quaternionFromYawPitchRoll(
 				yaw * DegToRad+ _ZeroRotYaw,  //以初始yaw方向为yaw的0点
@@ -635,6 +638,18 @@ namespace vrmotioncompensation
 
 			_ZeroLock.unlock();
 			_RefLock.unlock();
+
+			//-------------------------------------------------------计算位移补偿
+		
+	
+
+			vr::HmdVector3d_t motionPos = { Sway ,Heave ,Surge };
+
+			_RefLock.lock();
+			//_RefPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, Filter_vecPosition, false) + pose.vecWorldFromDriverTranslation;
+			_RefPos = vrmath::quaternionRotateVector(_ZeroRot, _ZeroRotInv, motionPos, false);
+			_RefLock.unlock();
+
 
 			//////////////////----------------------------------------旋转量
 
