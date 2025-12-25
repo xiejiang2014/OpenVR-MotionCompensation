@@ -114,14 +114,22 @@ namespace vrmotioncompensation
 		double RefPosY;
 		double RefPosZ;
 
-		double Reserved4;
-		double Reserved5;
+		//未补偿的位移值
+		double UncompensatedPosX;
+		double UncompensatedPosY;
+		double UncompensatedPosZ;
+		
+		//位移补偿
+		double CompensatedPoseWorldPosX;
+		double CompensatedPoseWorldPosY;
+		double CompensatedPoseWorldPosZ;
 
-		double Reserved6;
-		double Reserved7;
-		double Reserved8;
+		//补偿后的位移结果
+		double CompensatedPosX;
+		double CompensatedPosY;
+		double CompensatedPosZ;
 
-		double Reserved9;
+
 		double Reserved10;
 		double Reserved11;
 		double Reserved12;

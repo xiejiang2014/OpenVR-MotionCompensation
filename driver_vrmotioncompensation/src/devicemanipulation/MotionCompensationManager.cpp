@@ -145,7 +145,7 @@ namespace vrmotioncompensation
 
 		void MotionCompensationManager::setZeroPose(const vr::DriverPose_t& pose)
 		{
-			//return;
+			return;
 
 			// convert pose from driver space to app space
 			vr::HmdQuaternion_t tmpConj = vrmath::quaternionConjugate(pose.qWorldFromDriverRotation);
@@ -211,7 +211,7 @@ namespace vrmotioncompensation
 		/// <param name="pose"></param>
 		void MotionCompensationManager::updateRefPose(const vr::DriverPose_t& pose)
 		{
-			//return; //禁用此函数
+			return; //禁用此函数
 
 			// From https://github.com/ValveSoftware/driver_hydra/blob/master/drivers/driver_hydra/driver_hydra.cpp Line 835:
 			// "True acceleration is highly volatile, so it's not really reasonable to
@@ -304,8 +304,15 @@ namespace vrmotioncompensation
 
 			// convert pose from driver space to app space
 			// 坐标系转换 (Driver Space -> World Space)
+			// 这是一个典型的 刚体变换 (Rigid Body Transformation) 公式：最终坐标=	(旋转×原始坐标	)+平移
 			_RefLock.lock();
-			_RefPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, Filter_vecPosition, false) + pose.vecWorldFromDriverTranslation;
+			_RefPos = vrmath::quaternionRotateVector(		//这一步把位置的方向转换到了世界坐标系中
+							pose.qWorldFromDriverRotation, //驱动空间到世界空间的旋转
+							tmpConj, 
+							Filter_vecPosition, //原始的驱动空间的位置
+							false
+							)
+					+ pose.vecWorldFromDriverTranslation;   //这一步把位置从驱动坐标系平移到世界坐标系中
 			_RefLock.unlock();
 
 			// ----------------------------------------------------------------------------------------------- //
@@ -400,17 +407,21 @@ namespace vrmotioncompensation
 		bool MotionCompensationManager::applyMotionCompensation(vr::DriverPose_t& pose)
 		{
 			//实测如果 _Enabled 为 false ,那么根本不会走到这个函数来.
-//
-			if (_Enabled && _ZeroPoseValid && _RefPoseValid)//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
+			// && _ZeroPoseValid && _RefPoseValid
+			if (_Enabled)//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
 			{
 				//LOG(INFO) << _msgH2VR;
 				//LOG(INFO) << _msgVR2H;
 
 
+				//---------------------------------------------------提前计算好旋转的逆,方便后面将数据从世界坐标系转换回驱动坐标系
 				// pose.qWorldFromDriverRotation 这个四元数意思是从驱动坐标到世界坐标的旋转量.
 				// 通过 quaternionConjugate 函数 得到了这个旋转量的逆,即 tmpConj
 				// 之后用 tmpConj * 任何世界坐标系下的旋转量,就可以把这个旋转量转换回驱动坐标系
 				vr::HmdQuaternion_t tmpConj = vrmath::quaternionConjugate(pose.qWorldFromDriverRotation);
+
+
+				//---------------------------------------------------计算出头显当前在世界坐标系下的位置和旋转
 
 				//将头显在硬件坐标系下的原始位置转换到世界坐标系下 (Driver Space -> App Space)
 				//分为两个部分
@@ -433,18 +444,22 @@ namespace vrmotioncompensation
 				vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * pose.qRotation;
 
 
-				//---------------------------------------------------
+				//---------------------------------------------------记录初始旋转和位移
 				vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
-				//if (!_ZeroPoseValid)
-				//{
-				//	_ZeroRotYaw = headerQ.v[2];
-				//  //重点: 这里假设开启补偿的时候头显的正前方表示运动平台的正前方.
-				//  //在openvr中,b传感器所在的方向才是正前方,所以把头显此时的yaw记录下载,作为初始旋转角度.
-				//	//平台的pitch和roll是绝对的, 只有yaw是相对的,所以ZeroRot仅记录yaw
-				//	_ZeroRot = vrmath::quaternionFromYawPitchRoll(_ZeroRotYaw,0,0);
-				//	_ZeroRotInv = vrmath::quaternionConjugate(_ZeroRot);
-				//	_ZeroPoseValid = true;
-				//}
+				if (!_ZeroPoseValid)
+				{
+					_ZeroRotYaw = headerQ.v[2];
+				  //重点: 这里假设开启补偿的时候头显的正前方表示运动平台的正前方.
+				  //在openvr中,b传感器所在的方向才是正前方,所以把头显此时的yaw记录下载,作为初始旋转角度.
+					//平台的pitch和roll是绝对的, 只有yaw是相对的,所以ZeroRot仅记录yaw
+					_ZeroRot = vrmath::quaternionFromYawPitchRoll(_ZeroRotYaw,0,0);
+					_ZeroRotInv = vrmath::quaternionConjugate(_ZeroRot);
+
+
+					_ZeroPos = vrmath::quaternionRotateVector(_ZeroRot, _ZeroRotInv,{0,0,0}, false) + pose.vecWorldFromDriverTranslation;
+
+					_ZeroPoseValid = true;
+				}
 
 
 				try
@@ -456,26 +471,29 @@ namespace vrmotioncompensation
 					LOG(ERROR) << "updatePoseFromPlatform error  " << e.what();
 				}
 
-				//---------------------------------------------------
-
+				//---------------------------------------------------计算补偿
 				_RefLock.lock();
 				_ZeroLock.lock();
 
-				//计算位移补偿
-				//数学物理含义是：计算头显相对于动感平台的“局部坐标”，并将其固定在虚拟世界的原点上。
-				//第2步逆旋转:
-				//	假设参考器 抬头 30度。
-				//	在世界坐标系看来，你的头不仅向后移了，还向上移了（因为有摇臂长度）。
-				//	第1步算出的 relativeVector 虽然扣除了中心点的位移，但这个向量的方向在世界空间里依然是歪的（斜向上 30 度）。
-				//	我们需要把这个向量 “按回去”。
-				//	逆旋转 30 度：把那个斜向上的向量，转回到水平状态。
-				vr::HmdVector3d_t compensatedPoseWorldPos = _ZeroPos + //第3步 把结果加回到基准位置
-					vrmath::quaternionRotateVector(   //第2步
-					_RefRot, 
-					_RefRotInv,             //应用座椅旋转的逆。如果不动，座椅转了 10 度，头显也会跟着转 10 度。这里我们让头显反向转 10 度，这样在视觉上头显就“不动”了。
-					poseWorldPos - _RefPos, //计算头显相对于参考追踪器（座椅）的位置。  第1步,得到头显与参考点的相对位置
-					true
-				);
+				////////计算位移补偿
+				////////数学物理含义是：计算头显相对于动感平台的“局部坐标”，并将其固定在虚拟世界的原点上。
+				////////第2步逆旋转:
+				////////	假设参考器 抬头 30度。
+				////////	在世界坐标系看来，你的头不仅向后移了，还向上移了（因为有摇臂长度）。
+				////////	第1步算出的 relativeVector 虽然扣除了中心点的位移，但这个向量的方向在世界空间里依然是歪的（斜向上 30 度）。
+				////////	我们需要把这个向量 “按回去”。
+				////////	逆旋转 30 度：把那个斜向上的向量，转回到水平状态。
+				//////vr::HmdVector3d_t compensatedPoseWorldPos = _ZeroPos + //第3步 把结果加回到基准位置
+				//////	vrmath::quaternionRotateVector(   //第2步
+				//////	_RefRot, 
+				//////	_RefRotInv,             //应用座椅旋转的逆。如果不动，座椅转了 10 度，头显也会跟着转 10 度。这里我们让头显反向转 10 度，这样在视觉上头显就“不动”了。
+				//////	poseWorldPos - _RefPos, //计算头显相对于参考追踪器（座椅）的位置。  第1步,得到头显与参考点的相对位置
+				//////	true
+				//////);
+
+				//使用平台的位移数据时, _RefPos 本来就已经在世界中, 不需要再去反向旋转_RefRot  所以直接用减法计算即可
+				vr::HmdVector3d_t compensatedPoseWorldPos = poseWorldPos - _RefPos;
+
 
 				_ZeroLock.unlock();
 
@@ -527,7 +545,7 @@ namespace vrmotioncompensation
 				////////////////	//	结果 : 告诉 SteamVR “虽然我的传感器说我在动，但实际上我在虚拟世界里没动（或者动得没那么快）”。
 				////////////////}
 
-				//	-------------应用补偿 : 这里直接修改了参数 pose 的成员变量。
+				//---------------------------------------------------应用补偿 : 这里直接修改了参数 pose 的成员变量。
 				//将世界坐标系下的补偿量 compensatedPoseWorldRot 转回到了驱动坐标系,并应用到pose中使其生效
 				pose.qRotation = tmpConj * compensatedPoseWorldRot;
 
@@ -537,7 +555,11 @@ namespace vrmotioncompensation
 				// convert back to driver space
 				// 转换回驱动坐标系 (App Space -> Driver Space):
 				// SteamVR 只要 Driver Space 的数据，所以算完还得转回去。
-				vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, true);
+				vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(
+					pose.qWorldFromDriverRotation, 
+					tmpConj, 
+					compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, 
+				true);
 				_copyVec(pose.vecPosition, adjPoseDriverPos.v);
 
 
@@ -582,6 +604,22 @@ namespace vrmotioncompensation
 					_PVR2H->RefPosX = _RefPos.v[0];
 					_PVR2H->RefPosY = _RefPos.v[1];
 					_PVR2H->RefPosZ = _RefPos.v[2];
+
+					//--------------
+					_PVR2H->UncompensatedPosX = pose.vecPosition[0];
+					_PVR2H->UncompensatedPosY = pose.vecPosition[1];
+					_PVR2H->UncompensatedPosZ = pose.vecPosition[2];
+
+
+					_PVR2H->CompensatedPoseWorldPosX = compensatedPoseWorldPos.v[0];
+					_PVR2H->CompensatedPoseWorldPosY = compensatedPoseWorldPos.v[1];
+					_PVR2H->CompensatedPoseWorldPosZ = compensatedPoseWorldPos.v[2];
+
+
+					_PVR2H->CompensatedPosX = adjPoseDriverPos.v[0];
+					_PVR2H->CompensatedPosY = adjPoseDriverPos.v[1];
+					_PVR2H->CompensatedPosZ = adjPoseDriverPos.v[2];
+
 				}
 			}
 
@@ -621,7 +659,7 @@ namespace vrmotioncompensation
 			double Heave =  localData.Translation.v[1]	/ 1000;//米
 			double Surge = -localData.Translation.v[2]	/ 1000;//米
 
-			//-------------------------------------------------------计算旋转补偿
+			//-------------------------------------------------------计算相对旋转
 			//将旋转值转为4元数形式
 			vr::HmdQuaternion_t qRotation = vrmath::quaternionFromYawPitchRoll(
 				yaw * DegToRad+ _ZeroRotYaw,  //以初始yaw方向为yaw的0点
@@ -633,16 +671,13 @@ namespace vrmotioncompensation
 			_ZeroLock.lock();
 
 			//计算“相对偏移”
-			_RefRot = qRotation * vrmath::quaternionConjugate(_ZeroRot);
+			_RefRot = qRotation * _ZeroRotInv;
 			_RefRotInv = vrmath::quaternionConjugate(_RefRot);
 
 			_ZeroLock.unlock();
 			_RefLock.unlock();
 
-			//-------------------------------------------------------计算位移补偿
-		
-	
-
+			//-------------------------------------------------------计算相对位移
 			vr::HmdVector3d_t motionPos = { Sway ,Heave ,Surge };
 
 			_RefLock.lock();
