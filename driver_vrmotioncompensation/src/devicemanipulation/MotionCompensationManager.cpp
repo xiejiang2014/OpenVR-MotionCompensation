@@ -372,9 +372,9 @@ namespace vrmotioncompensation
 			double sway  =  localData.Translation.v[1]	/ 1000;	//毫米->米
 			double heave =  localData.Translation.v[2]	/ 1000;	//毫米->米
 
-			double eyeTx =  localData.EyePos.v[1] / 1000;		//毫米->米 vr中 X轴指向右方
-			double eyeTy =  localData.EyePos.v[2] / 1000;		//毫米->米 vr中 Y轴指向上方
-			double eyeTz =  localData.EyePos.v[0] / 1000;		//毫米->米 vr中 Z轴指向前方
+			double eyeTx =  -localData.EyePos.v[1] / 1000;		//毫米->米 vr中 X轴指向右方
+			double eyeTy =  -localData.EyePos.v[2] / 1000;		//毫米->米 vr中 Y轴指向上方
+			double eyeTz =  -localData.EyePos.v[0] / 1000;		//毫米->米 vr中 Z轴指向前方
 
 
 
