@@ -28,29 +28,7 @@ namespace vrmotioncompensation
 
 		bool DeviceManipulationHandle::handlePoseUpdate(uint32_t& unWhichDevice, vr::DriverPose_t& newPose, uint32_t unPoseStructSize)
 		{
-			//实测在用手柄进行补偿时, 以下两个分支的代码都会被调用, 大概是 ReferenceTracker 每调用一次, MotionCompensated会调用3-6次
-			if (m_deviceMode == MotionCompensationDeviceMode::ReferenceTracker)
-			{ 
-				//return true;
-				//LOG(INFO) << "handlePoseUpdate() m_deviceMode= ReferenceTracker";
-
-
-				//Check if the pose is valid to prevent unwanted jitter and movement
-				if (newPose.poseIsValid && newPose.result == vr::TrackingResult_Running_OK) //参考跟踪器
-				{
-					//Set the Zero-Point for the reference tracker if not done yet
-					if (!m_motionCompensationManager.isZeroPoseValid())
-					{						
-						m_motionCompensationManager.setZeroPose(newPose);
-					}
-					else
-					{
-						//Update reference tracker position
-						m_motionCompensationManager.updateRefPose(newPose);
-					}
-				}
-			}
-			else if (m_deviceMode == MotionCompensationDeviceMode::MotionCompensated) //运动补偿
+			if (m_deviceMode == MotionCompensationDeviceMode::MotionCompensated) //运动补偿
 			{
 
 				//LOG(INFO) << "handlePoseUpdate() m_deviceMode= MotionCompensated";

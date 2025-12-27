@@ -125,13 +125,7 @@ namespace vrmotioncompensation
 			void setOffsets(MMFstruct_H2VR offsets);
 
 			bool isZeroPoseValid();
-			
-			void resetZeroPose();
-
-			void setZeroPose(const vr::DriverPose_t& pose);
-			
-			void updateRefPose(const vr::DriverPose_t& pose);
-			
+								
 			bool applyMotionCompensation(vr::DriverPose_t& pose);
 
 			void updatePoseFromPlatform();
@@ -226,7 +220,6 @@ namespace vrmotioncompensation
 
 			Spinlock _ZeroLock, _RefLock, _RefVelLock;
 
-			bool _Enabled = false;
 			MotionCompensationMode _Mode = MotionCompensationMode::Disabled;			
 			
 
@@ -300,6 +293,7 @@ namespace vrmotioncompensation
 			std::vector<float> _posInRRP = { 0, 0, 0, 0, 0, 0 };
 			std::vector<float> CoordinateTransform(const std::vector<float>& pos_original, const std::vector<float>& RRP);
 			std::vector<float> ProjectRotationVector(const std::vector<float>& pos_original, const std::vector<float>& rrp);
+			vr::HmdVector3d_t GetEyeWorldPosition(double roll, double pitch, double yaw, vr::HmdVector3d_t eyePos);
 		};
 	}
 }

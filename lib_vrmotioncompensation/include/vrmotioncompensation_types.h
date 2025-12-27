@@ -27,58 +27,51 @@ namespace vrmotioncompensation
 
 	struct MMFstruct_H2VR
 	{
-		vr::HmdVector3d_t Translation;	//3个double
-		vr::HmdVector3d_t Rotation;		//3个double
-		vr::HmdQuaternion_t QRotation;	//保留
-		uint32_t Flags_1;
-		uint32_t Flags_2;
+		vr::HmdVector3d_t Rotation;		//平台旋转量 角度 3个double
+		vr::HmdVector3d_t Translation;	//平台平移量 毫米 3个double
+		vr::HmdVector3d_t EyePos;		//眼点相对于平台原点平移量 毫米 3个double
 
-		//头显实时姿态
-		double HeaderQw;
-		double HeaderQx;
-		double HeaderQy;
-		double HeaderQz;
+		//保留
+		double		Reserved01;
+		double		Reserved02;
+		double		Reserved03;
+		double		Reserved04;
+		double		Reserved05;
+		double		Reserved06;
+		double		Reserved07;
+		double		Reserved08;
+		double		Reserved09;
+		double		Reserved10;
+		double		Reserved11;
+		double		Reserved12;
+		double		Reserved13;
+		double		Reserved14;
+		double		Reserved15;
+		double		Reserved16;
 
-		//参考起始姿态
-		double ZeroRotW;
-		double ZeroRotX;
-		double ZeroRotY;
-		double ZeroRotZ;
-
-		//补偿姿态
-		double RefRotQw;
-		double RefRotQx;
-		double RefRotQy;
-		double RefRotQz;
-
-		int Reserved_int0;
-		int Reserved_int1;
-		int Reserved_int2;
-		int Reserved_int3;
-		int Reserved_int4;
-
-		uint32_t dataIndex;
+		int			Enable;
+		uint32_t	DataIndex;
 
 		MMFstruct_H2VR()
 		{
 			Translation = { 0, 0, 0 };
 			Rotation = { 0, 0, 0 };
-			QRotation = { 0, 0, 0, 0 };
-			Flags_1 = 0;
-			Flags_2 = 0;
+			EyePos = { 0, 0, 0 };
 		}
 	};
 
 
-
+	/// <summary>
+	/// 从 vr 传到 host
+	/// </summary>
 	struct MMFstruct_VR2H
 	{
+
 		//头显实时姿态
 		double HeaderRotw;
 		double HeaderRotx;
 		double HeaderRoty;
 		double HeaderRotz;
-
 
 		double HeaderPosX;
 		double HeaderPosY;
@@ -133,7 +126,9 @@ namespace vrmotioncompensation
 		double Reserved10;
 		double Reserved11;
 		double Reserved12;
-		double Reserved13;
+
+		uint32_t DataIndex;
+		uint32_t Reserved13;
 
 		MMFstruct_VR2H()
 		{

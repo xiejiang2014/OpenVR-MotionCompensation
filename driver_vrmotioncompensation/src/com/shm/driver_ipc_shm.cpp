@@ -329,19 +329,11 @@ namespace vrmotioncompensation
 									auto serverDriver = ServerDriver::getInstance();
 									if (serverDriver)
 									{
-										LOG(INFO) << "Resetting reference zero pose";
-
-										serverDriver->motionCompensation().resetZeroPose();
-
 										resp.status = ipc::ReplyStatus::Ok;
 									}
 									else
 									{
 										resp.status = ipc::ReplyStatus::UnknownError;
-									}
-
-									if (resp.status != ipc::ReplyStatus::Ok)
-									{
 										LOG(ERROR) << "Error while setting motion compensation properties: Error code " << (int)resp.status;
 									}
 

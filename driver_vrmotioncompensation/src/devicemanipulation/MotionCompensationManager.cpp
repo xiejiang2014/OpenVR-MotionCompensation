@@ -17,10 +17,6 @@ namespace vrmotioncompensation
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-
-
-
-
 		const float DegToRad = M_PI / 180.0f;
 		const float RadToDeg = 180.0f / M_PI;
 
@@ -80,13 +76,11 @@ namespace vrmotioncompensation
 				_RefPoseValid = false;
 				_RefPoseValidCounter = 0;
 				_ZeroPoseValid = false;
-				_Enabled = true;
 
 				setAlpha(_Samples);
 			}
 			else
 			{
-				_Enabled = false;
 				_zeroMotionRotValid = false;
 			}
 
@@ -138,267 +132,6 @@ namespace vrmotioncompensation
 			return _ZeroPoseValid;
 		}
 
-		void MotionCompensationManager::resetZeroPose()
-		{
-			_ZeroPoseValid = false;
-		}
-
-		void MotionCompensationManager::setZeroPose(const vr::DriverPose_t& pose)
-		{
-			return;
-
-			// convert pose from driver space to app space
-			vr::HmdQuaternion_t tmpConj = vrmath::quaternionConjugate(pose.qWorldFromDriverRotation);
-
-			// Save zero points
-			_ZeroLock.lock();
-			_ZeroPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, pose.vecPosition, false) + pose.vecWorldFromDriverTranslation;
-			_ZeroRot = pose.qWorldFromDriverRotation * pose.qRotation;
-
-			_ZeroPoseValid = true;
-			_ZeroLock.unlock();
-		}
-
-		//下面的两个函数  
-		// updateRefPose 用于计算tracker的姿态, 
-		// applyMotionCompensation 将 updateRefPose 计算出的姿态作为参考进行姿态补偿
-		//以下是 applyMotionCompensation 中用到的所有来自 updateRefPose 计算的结果列表，按数据类型分类：
-		//	1. 状态标志
-		//		_RefPoseValid
-		//			用途 : 用于判断条件 if (... && _RefPoseValid)。
-		//			来源 : updateRefPose 结尾处。只有当参考追踪器连续稳定运行超过 100 帧后，该值才会被设为 true，防止在数据尚未稳定时应用补偿。
-		//	2. 核心姿态数据(位置与旋转)
-		//		_RefPos(参考位置)
-		//			用途 : 在计算 compensatedPoseWorldPos 时使用：poseWorldPos - _RefPos。
-		//			逻辑 : 计算头显相对于动感座椅当前位置的偏移量。
-		//		_RefRot(参考旋转差)
-		//			用途 : 在 vrmath::quaternionRotateVector(_RefRot, ...) 中作为参数。
-		//			逻辑 : 用于辅助计算旋转后的向量偏移。
-		//		_RefRotInv(参考旋转的逆)
-		//			用途 :
-		//			计算位置补偿时：vrmath::quaternionRotateVector(..., _RefRotInv, ...)。
-		//			计算旋转补偿时：compensatedPoseWorldRot = _RefRotInv * poseWorldRot。
-		//			逻辑 : 这是最关键的变量。它代表了座椅旋转的“反方向”。把它应用到头显上，就能抵消掉座椅的旋转运动。
-		//	3. 物理属性数据(用于修正预测)
-		//		这些变量在 else 分支中（即非归零模式下）被使用，用于直接从头显的速度 / 加速度中减去座椅的运动分量，防止 SteamVR 的预测算法失效。
-		//		_RefVel(参考线速度)
-		//			用途: pose.vecVelocity[...] -= tmpPosVel.v[...](经过坐标转换后的 _RefVel)。
-		//		_RefRotVel(参考角速度)
-		//			用途 : pose.vecAngularVelocity[...] -= tmpRotVel.v[...]。
-		//		_RefAcc(参考线加速度)
-		//			用途 : pose.vecAcceleration[...] -= tmpPosAcc.v[...]。
-		//		_RefRotAcc(参考角加速度)
-		//			用途 : pose.vecAngularAcceleration[...] -= tmpRotAcc.v[...]。
-		//	
-		//	总结对照表
-		//	变量名			在 updateRefPose 中(生产者)			在 applyMotionCompensation 中(消费者)
-		//	_RefPoseValid	被赋值为 true (当计数器 > 100)			用于 if 判断是否执行补偿
-		//	_RefPos			计算并更新(世界坐标系)					被头显位置减去(计算相对位置)
-		//	_RefRot			计算(当前旋转 * 归零旋转的逆)			用于向量旋转计算
-		//	_RefRotInv		计算(_RefRot 的共轭 / 逆)				乘到头显旋转上(核心抵消操作)
-		//	_RefVel			计算(位置微分 + 坐标转换)				从头显线速度中减去
-		//	_RefRotVel		计算(角度微分 + 坐标转换)				从头显角速度中减去
-		//	_RefAcc			计算(速度微分 + 坐标转换)				从头显线加速度中减去
-		//	_RefRotAcc		计算(角速微分 + 坐标转换)				从头显角加速度中减去
-
-
-
-
-		/// <summary>
-		/// 计算追踪器的姿态,注意参数中的 pose 应该就是从openvr得到的原始姿态值, 在这个函数中是不会去修改它的.
-		/// 本函数会更新 _RefPos, _RefRotInv, _RefVel  的值 留给 applyMotionCompensation 中使用
-		/// </summary>
-		/// <param name="pose"></param>
-		void MotionCompensationManager::updateRefPose(const vr::DriverPose_t& pose)
-		{
-			return; //禁用此函数
-
-			// From https://github.com/ValveSoftware/driver_hydra/blob/master/drivers/driver_hydra/driver_hydra.cpp Line 835:
-			// "True acceleration is highly volatile, so it's not really reasonable to
-			// extrapolate much from it anyway.  Passing it as 0 from any driver should
-			// be fine."
-
-			// Line 832:
-			// "The trade-off here is that setting a valid velocity causes the controllers
-			// to jitter, but the controllers feel much more "alive" and lighter.
-			// The jitter while stationary is more annoying than the laggy feeling caused
-			// by disabling velocity (which effectively disables prediction for rendering)."
-			// That means that we have to calculate the velocity to not interfere with the prediction for rendering
-
-			// Oculus devices do use acceleration. It also seems that the HMD uses theses values for render-prediction
-
-
-			// "真实的加速度数据波动性很强，因此无论如何都不宜基于它进行过多推测。
-			// 任何驱动程序将其传递为0值都是可以接受的。"
-			// 第832行：
-			// "此处的权衡在于：设置有效速度会导致控制器产生抖动，
-			// 但控制器的反馈会显得更'鲜活'和轻盈。
-			// 静止状态下的抖动感，比关闭速度数据（这实际会禁用渲染预测）
-			// 所造成的延迟感更令人困扰。"
-			// 这意味着我们必须计算速度数据，以避免干扰渲染预测
-			// Oculus设备确实会使用加速度数据。似乎头戴设备也会将这些数值用于渲染预测。
-
-
-
-
-			//这段代码是 VR 运动补偿系统的核心“信号处理”模块。
-			//	它的作用是：处理参考追踪器（Reference Tracker）的原始数据。
-			//	你可以把这个函数想象成一个** “净化工厂”** 。
-			//	原料：参考追踪器（绑在动感座椅上的那个）传来的原始位置和旋转数据（可能带有抖动和噪音）。
-			//	加工：滤波（平滑去噪）、计算速度和加速度、坐标系转换。
-			//	产品：一个平滑的、干净的、带有物理属性的“基准姿态”，供后续计算头显补偿时使用。
-
-
-			vr::HmdVector3d_t Filter_vecPosition = { 0, 0, 0 };
-			vr::HmdVector3d_t Filter_vecVelocity = { 0, 0, 0 };
-			vr::HmdVector3d_t Filter_vecAcceleration = { 0, 0, 0 };
-			vr::HmdVector3d_t Filter_vecAngularVelocity = { 0, 0, 0 };
-			vr::HmdVector3d_t Filter_vecAngularAcceleration = { 0, 0, 0 };
-			vr::HmdVector3d_t RotEulerFilter = { 0, 0, 0 };
-
-			vr::HmdQuaternion_t tmpConj = vrmath::quaternionConjugate(pose.qWorldFromDriverRotation);
-
-			// Get current time in microseconds and convert it to seconds
-			// 获取微秒级当前时间
-			long long now = std::chrono::duration_cast <std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-
-			//当前帧和上一帧的时间差
-			double tdiff = (double)(now - _RefTrackerLastTime) / 1.0E6 + (pose.poseTimeOffset - _RefTrackerLastPose.poseTimeOffset);
-
-			// Position
-			// Add a exponential median average filter
-			// 位置滤波
-			if (_Samples >= 2)
-			{
-				// ----------------------------------------------------------------------------------------------- //
-				// ----------------------------------------------------------------------------------------------- //
-				// Position
-				// DEMA(Double Exponential Moving Average) : 双重指数移动平均滤波。
-				// 作用：去噪。动感座椅震动时，追踪器的数据会有微小的乱跳。这个滤波器把这些高频噪音滤掉，让位置变化更平滑。
-				Filter_vecPosition.v[0] = DEMA(pose.vecPosition[0], 0);
-				Filter_vecPosition.v[1] = DEMA(pose.vecPosition[1], 1);
-				Filter_vecPosition.v[2] = DEMA(pose.vecPosition[2], 2);
-
-				// ----------------------------------------------------------------------------------------------- //
-				// ----------------------------------------------------------------------------------------------- //
-				// Velocity and acceleration
-				// 既然硬件的原始速度太抖，我们就算“数学速度”。
-				// 速度 = (当前滤波位置 - 上一帧位置) / 时间差。
-				// 加速度 = (当前速度 - 上一帧速度) / 时间差。
-				if (!_SetZeroMode)
-				{
-					Filter_vecVelocity.v[0] = vecVelocity(tdiff, Filter_vecPosition.v[0], _RefTrackerLastPose.vecPosition[0]);
-					Filter_vecVelocity.v[1] = vecVelocity(tdiff, Filter_vecPosition.v[1], _RefTrackerLastPose.vecPosition[1]);
-					Filter_vecVelocity.v[2] = vecVelocity(tdiff, Filter_vecPosition.v[2], _RefTrackerLastPose.vecPosition[2]);
-
-					Filter_vecAcceleration.v[0] = vecAcceleration(tdiff, Filter_vecVelocity.v[0], _RefTrackerLastPose.vecVelocity[0]);
-					Filter_vecAcceleration.v[1] = vecAcceleration(tdiff, Filter_vecVelocity.v[1], _RefTrackerLastPose.vecVelocity[1]);
-					Filter_vecAcceleration.v[2] = vecAcceleration(tdiff, Filter_vecVelocity.v[2], _RefTrackerLastPose.vecVelocity[2]);
-				}
-			}
-			else
-			{
-				_copyVec(Filter_vecPosition, pose.vecPosition);
-				_copyVec(Filter_vecVelocity, pose.vecVelocity);
-			}
-
-			// convert pose from driver space to app space
-			// 坐标系转换 (Driver Space -> World Space)
-			// 这是一个典型的 刚体变换 (Rigid Body Transformation) 公式：最终坐标=	(旋转×原始坐标	)+平移
-			_RefLock.lock();
-			_RefPos = vrmath::quaternionRotateVector(		//这一步把位置的方向转换到了世界坐标系中
-							pose.qWorldFromDriverRotation, //驱动空间到世界空间的旋转
-							tmpConj, 
-							Filter_vecPosition, //原始的驱动空间的位置
-							false
-							)
-					+ pose.vecWorldFromDriverTranslation;   //这一步把位置从驱动坐标系平移到世界坐标系中
-			_RefLock.unlock();
-
-			// ----------------------------------------------------------------------------------------------- //
-			// ----------------------------------------------------------------------------------------------- //
-			// Rotation
-			// 旋转滤波
-			if (_LpfBeta <= 0.9999)
-			{
-				// 两级低通滤波器
-
-				// 1st stage
-				_Filter_rotPosition[0] = lowPassFilterQuaternion(pose.qRotation, _Filter_rotPosition[0]);
-
-				// 2nd stage
-				_Filter_rotPosition[1] = lowPassFilterQuaternion(_Filter_rotPosition[0], _Filter_rotPosition[1]);
-
-
-				vr::HmdVector3d_t RotEulerFilter = toEulerAngles(_Filter_rotPosition[1]);
-
-				if (!_SetZeroMode)
-				{
-					Filter_vecAngularVelocity.v[0] = rotVelocity(tdiff, RotEulerFilter.v[0], _RotEulerFilterOld.v[0]);
-					Filter_vecAngularVelocity.v[1] = rotVelocity(tdiff, RotEulerFilter.v[1], _RotEulerFilterOld.v[1]);
-					Filter_vecAngularVelocity.v[2] = rotVelocity(tdiff, RotEulerFilter.v[2], _RotEulerFilterOld.v[2]);
-
-					Filter_vecAngularAcceleration.v[0] = vecAcceleration(tdiff, Filter_vecAngularVelocity.v[0], _RefTrackerLastPose.vecAngularVelocity[0]);
-					Filter_vecAngularAcceleration.v[1] = vecAcceleration(tdiff, Filter_vecAngularVelocity.v[1], _RefTrackerLastPose.vecAngularVelocity[1]);
-					Filter_vecAngularAcceleration.v[2] = vecAcceleration(tdiff, Filter_vecAngularVelocity.v[2], _RefTrackerLastPose.vecAngularVelocity[2]);
-				}
-			}
-			else
-			{
-				_Filter_rotPosition[1] = pose.qRotation;
-
-				_copyVec(Filter_vecAngularVelocity, pose.vecAngularVelocity);
-				_copyVec(Filter_vecAngularAcceleration, pose.vecAngularAcceleration);
-			}
-
-			// calculate orientation difference and its inverse
-			// _ZeroRot: 动感座椅静止归零时的旋转角度（基准）。
-			//	_trackWorldRot : 动感座椅现在的旋转角度。
-			//	_RefRot : 现在的角度相对于基准角度转了多少。
-			//	_RefRotInv : _RefRot 的逆（Inverse）。
-			//	意义：如果座椅向左转了 10 度，_RefRotInv 就是“向右转 10 度”。
-			//	后续：这个逆旋转将被应用到头显上，从而抵消掉座椅的运动。
-
-			_trackWorldRot = pose.qWorldFromDriverRotation * _Filter_rotPosition[1];
-			_RefLock.lock();
-			_ZeroLock.lock();
-			//核心算法：计算“相对偏移”(The Magic)
-			_RefRot = _trackWorldRot * vrmath::quaternionConjugate(_ZeroRot);
-			_RefRotInv = vrmath::quaternionConjugate(_RefRot);
-			_ZeroLock.unlock();
-			_RefLock.unlock();
-
-			if (!_SetZeroMode)
-			{
-				// Convert velocity and acceleration values into app space
-				_RefVelLock.lock();
-				_RefVel = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, Filter_vecVelocity, false);
-				_RefRotVel = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, Filter_vecAngularVelocity, false);
-
-				_RefAcc = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, Filter_vecAcceleration, false);
-				_RefRotAcc = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, Filter_vecAngularAcceleration, false);
-				_RefVelLock.unlock();
-			}
-
-			// ----------------------------------------------------------------------------------------------- //
-			// ----------------------------------------------------------------------------------------------- //
-			// Wait 100 frames before setting reference pose to valid
-			// 预热 滤波器（DEMA, LPF）需要一定的数据量才能稳定（收敛）。
-			// 刚启动的前 100 帧（约 0.1 秒），数据可能不准，所以标记为“无效”，防止画面在一开始乱飞。
-			if (_RefPoseValidCounter > 100)
-			{
-				_RefPoseValid = true;
-			}
-			else
-			{
-				_RefPoseValidCounter++;
-			}
-
-			// Save last rotation and pose
-			_RotEulerFilterOld = RotEulerFilter;
-			_RefTrackerLastPose = pose;
-		}
-
 		/// <summary>
 		/// 应用动作补偿,
 		/// </summary>
@@ -406,223 +139,203 @@ namespace vrmotioncompensation
 		/// <returns></returns>
 		bool MotionCompensationManager::applyMotionCompensation(vr::DriverPose_t& pose)
 		{
-			//实测如果 _Enabled 为 false ,那么根本不会走到这个函数来.
-			// && _ZeroPoseValid && _RefPoseValid
-			if (_Enabled)//只有在功能开启、归零点有效、参考数据有效（前100帧热身完毕）时才工作。否则直接返回 true（不做任何修改）。
+			//没有启用则不进行补偿逻辑
+			if (!_PH2VR || !_PH2VR->Enable)
 			{
-				//LOG(INFO) << _msgH2VR;
-				//LOG(INFO) << _msgVR2H;
-
-
-				//---------------------------------------------------提前计算好旋转的逆,方便后面将数据从世界坐标系转换回驱动坐标系
-				// pose.qWorldFromDriverRotation 这个四元数意思是从驱动坐标到世界坐标的旋转量.
-				// 通过 quaternionConjugate 函数 得到了这个旋转量的逆,即 tmpConj
-				// 之后用 tmpConj * 任何世界坐标系下的旋转量,就可以把这个旋转量转换回驱动坐标系
-				vr::HmdQuaternion_t tmpConj = vrmath::quaternionConjugate(pose.qWorldFromDriverRotation);
-
-
-				//---------------------------------------------------计算出头显当前在世界坐标系下的位置和旋转
-
-				//将头显在硬件坐标系下的原始位置转换到世界坐标系下 (Driver Space -> App Space)
-				//分为两个部分
-				//1 旋转向量(位置)
-				//		想象你的定位基站是歪着挂在墙角的（向下倾斜 45 度）。
-				//		头显在你前方 1 米处。但在基站看来，头显是在它“上方” 1 米处。
-				//		这一步就是把这个“相对于基站的歪坐标”，旋转修正为“相对于地面的平坐标”。
-				//		结果：此时得到的坐标，方向已经和世界坐标一致了（比如 Y 轴垂直向上），但原点还在基站上。
-				//2 平移/位移
-				//		加上这个偏移量，把原点从驱动坐标转到世界坐标。
-				vr::HmdVector3d_t poseWorldPos = vrmath::quaternionRotateVector(
-					pose.qWorldFromDriverRotation,	//旋转
-					tmpConj,						//逆旋转
-					pose.vecPosition,				//头显在硬件坐标系下的原始位置
-					false) 
-					+ pose.vecWorldFromDriverTranslation//(平移/位移)  
-					;
-
-				// 将头显旋转从驱动坐标系转换到世界坐标系 (Driver Space -> App Space):  水平时 pitch 和 roll 角度为0   正对b通道探头时 yaw 角度为0
-				vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * pose.qRotation;
-
-
-				//---------------------------------------------------记录初始旋转和位移
-				vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
-				if (!_ZeroPoseValid)
-				{
-					_ZeroRotYaw = headerQ.v[2];
-				  //重点: 这里假设开启补偿的时候头显的正前方表示运动平台的正前方.
-				  //在openvr中,b传感器所在的方向才是正前方,所以把头显此时的yaw记录下载,作为初始旋转角度.
-					//平台的pitch和roll是绝对的, 只有yaw是相对的,所以ZeroRot仅记录yaw
-					_ZeroRot = vrmath::quaternionFromYawPitchRoll(_ZeroRotYaw,0,0);
-					_ZeroRotInv = vrmath::quaternionConjugate(_ZeroRot);
-
-
-					_ZeroPos = vrmath::quaternionRotateVector(_ZeroRot, _ZeroRotInv,{0,0,0}, false) + pose.vecWorldFromDriverTranslation;
-
-					_ZeroPoseValid = true;
-				}
-
-
-				try
-				{
-					updatePoseFromPlatform();
-				}
-				catch (std::exception& e)
-				{
-					LOG(ERROR) << "updatePoseFromPlatform error  " << e.what();
-				}
-
-				//---------------------------------------------------计算补偿
-				_RefLock.lock();
-				_ZeroLock.lock();
-
-				////////计算位移补偿
-				////////数学物理含义是：计算头显相对于动感平台的“局部坐标”，并将其固定在虚拟世界的原点上。
-				////////第2步逆旋转:
-				////////	假设参考器 抬头 30度。
-				////////	在世界坐标系看来，你的头不仅向后移了，还向上移了（因为有摇臂长度）。
-				////////	第1步算出的 relativeVector 虽然扣除了中心点的位移，但这个向量的方向在世界空间里依然是歪的（斜向上 30 度）。
-				////////	我们需要把这个向量 “按回去”。
-				////////	逆旋转 30 度：把那个斜向上的向量，转回到水平状态。
-				//////vr::HmdVector3d_t compensatedPoseWorldPos = _ZeroPos + //第3步 把结果加回到基准位置
-				//////	vrmath::quaternionRotateVector(   //第2步
-				//////	_RefRot, 
-				//////	_RefRotInv,             //应用座椅旋转的逆。如果不动，座椅转了 10 度，头显也会跟着转 10 度。这里我们让头显反向转 10 度，这样在视觉上头显就“不动”了。
-				//////	poseWorldPos - _RefPos, //计算头显相对于参考追踪器（座椅）的位置。  第1步,得到头显与参考点的相对位置
-				//////	true
-				//////);
-
-				//使用平台的位移数据时, _RefPos 本来就已经在世界中, 不需要再去反向旋转_RefRot  所以直接用减法计算即可
-				vr::HmdVector3d_t compensatedPoseWorldPos = poseWorldPos - _RefPos;
-
-
-				_ZeroLock.unlock();
-
-
-				//计算旋转补偿 直接把座椅旋转的逆 (_RefRotInv) 乘到头显旋转上。这实现了“去耦合”。
-				vr::HmdQuaternion_t compensatedPoseWorldRot = _RefRotInv *  poseWorldRot;
-
-				_RefLock.unlock();
-
-				////////////////// Translate the motion ref Velocity / Acceleration values into driver space and directly subtract them
-				//////////////////处理速度和加速度:
-				////////////////if (_SetZeroMode)
-				////////////////{
-				////////////////	_zeroVec(pose.vecVelocity);
-				////////////////	_zeroVec(pose.vecAcceleration);
-				////////////////	_zeroVec(pose.vecAngularVelocity);
-				////////////////	_zeroVec(pose.vecAngularAcceleration);
-				////////////////}
-				////////////////else
-				////////////////{
-				////////////////	// Translate the motion ref Velocity / Acceleration values into driver space and directly subtract them
-				////////////////	_RefVelLock.lock();
-				////////////////	vr::HmdVector3d_t tmpPosVel = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefVel, true);
-				////////////////	// 直接减去参考追踪器的速度
-				////////////////	pose.vecVelocity[0] -= tmpPosVel.v[0];
-				////////////////	pose.vecVelocity[1] -= tmpPosVel.v[1];
-				////////////////	pose.vecVelocity[2] -= tmpPosVel.v[2];
-
-				////////////////	vr::HmdVector3d_t tmpRotVel = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefRotVel, true);
-				////////////////	pose.vecAngularVelocity[0] -= tmpRotVel.v[0];
-				////////////////	pose.vecAngularVelocity[1] -= tmpRotVel.v[1];
-				////////////////	pose.vecAngularVelocity[2] -= tmpRotVel.v[2];
-
-				////////////////	vr::HmdVector3d_t tmpPosAcc = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefAcc, true);
-				////////////////	pose.vecAcceleration[0] -= tmpPosAcc.v[0];
-				////////////////	pose.vecAcceleration[1] -= tmpPosAcc.v[1];
-				////////////////	pose.vecAcceleration[2] -= tmpPosAcc.v[2];
-
-				////////////////	vr::HmdVector3d_t tmpRotAcc = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefRotAcc, true);
-				////////////////	pose.vecAngularAcceleration[0] -= tmpRotAcc.v[0];
-				////////////////	pose.vecAngularAcceleration[1] -= tmpRotAcc.v[1];
-				////////////////	pose.vecAngularAcceleration[2] -= tmpRotAcc.v[2];
-				////////////////	_RefVelLock.unlock();
-
-
-				////////////////	//这部分非常重要！
-				////////////////	//	如果只改位置不改速度，SteamVR 的预测算法会发疯，导致画面抖动。
-				////////////////	//	代码计算了参考追踪器（座椅）的速度，并将其转换到 Driver Space，然后直接从头显的速度中减去。
-				////////////////	//	结果 : 告诉 SteamVR “虽然我的传感器说我在动，但实际上我在虚拟世界里没动（或者动得没那么快）”。
-				////////////////}
-
-				//---------------------------------------------------应用补偿 : 这里直接修改了参数 pose 的成员变量。
-				//将世界坐标系下的补偿量 compensatedPoseWorldRot 转回到了驱动坐标系,并应用到pose中使其生效
-				pose.qRotation = tmpConj * compensatedPoseWorldRot;
-
-
-
-
-				// convert back to driver space
-				// 转换回驱动坐标系 (App Space -> Driver Space):
-				// SteamVR 只要 Driver Space 的数据，所以算完还得转回去。
-				vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(
-					pose.qWorldFromDriverRotation, 
-					tmpConj, 
-					compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, 
-				true);
-				_copyVec(pose.vecPosition, adjPoseDriverPos.v);
-
-
-				//回传头显实时姿态
-				if (_PVR2H)
-				{
-					_PVR2H->HeaderRotw = poseWorldRot.w;
-					_PVR2H->HeaderRotx = poseWorldRot.x;
-					_PVR2H->HeaderRoty = poseWorldRot.y;
-					_PVR2H->HeaderRotz = poseWorldRot.z;
-
-					_PVR2H->HeaderPosX = poseWorldPos.v[0];
-					_PVR2H->HeaderPosY = poseWorldPos.v[1];
-					_PVR2H->HeaderPosZ = poseWorldPos.v[2];
-
-					//--------------
-
-					_PVR2H->ZeroRotW = _ZeroRot.w;
-					_PVR2H->ZeroRotX = _ZeroRot.x;
-					_PVR2H->ZeroRotY = _ZeroRot.y;
-					_PVR2H->ZeroRotZ = _ZeroRot.z;
-
-					_PVR2H->ZeroPosX = _ZeroPos.v[0];
-					_PVR2H->ZeroPosY = _ZeroPos.v[1];
-					_PVR2H->ZeroPosZ = _ZeroPos.v[2];
-
-					//--------------
-
-					_PVR2H->TrackerRotW = _trackWorldRot.w;
-					_PVR2H->TrackerRotX = _trackWorldRot.x;
-					_PVR2H->TrackerRotY = _trackWorldRot.y;
-					_PVR2H->TrackerRotZ = _trackWorldRot.z;
-
-
-					//--------------
-
-					_PVR2H->RefRotQw = _RefRot.w;
-					_PVR2H->RefRotQx = _RefRot.x;
-					_PVR2H->RefRotQy = _RefRot.y;
-					_PVR2H->RefRotQz = _RefRot.z;
-
-					_PVR2H->RefPosX = _RefPos.v[0];
-					_PVR2H->RefPosY = _RefPos.v[1];
-					_PVR2H->RefPosZ = _RefPos.v[2];
-
-					//--------------
-					_PVR2H->UncompensatedPosX = pose.vecPosition[0];
-					_PVR2H->UncompensatedPosY = pose.vecPosition[1];
-					_PVR2H->UncompensatedPosZ = pose.vecPosition[2];
-
-
-					_PVR2H->CompensatedPoseWorldPosX = compensatedPoseWorldPos.v[0];
-					_PVR2H->CompensatedPoseWorldPosY = compensatedPoseWorldPos.v[1];
-					_PVR2H->CompensatedPoseWorldPosZ = compensatedPoseWorldPos.v[2];
-
-
-					_PVR2H->CompensatedPosX = adjPoseDriverPos.v[0];
-					_PVR2H->CompensatedPosY = adjPoseDriverPos.v[1];
-					_PVR2H->CompensatedPosZ = adjPoseDriverPos.v[2];
-
-				}
+				return true;
 			}
 
+			//---------------------------------------------------提前计算好旋转的逆,方便后面将数据从世界坐标系转换回驱动坐标系
+			// pose.qWorldFromDriverRotation 这个四元数意思是从驱动坐标到世界坐标的旋转量.
+			// 通过 quaternionConjugate 函数 得到了这个旋转量的逆,即 tmpConj
+			// 之后用 tmpConj * 任何世界坐标系下的旋转量,就可以把这个旋转量转换回驱动坐标系
+			vr::HmdQuaternion_t tmpConj = vrmath::quaternionConjugate(pose.qWorldFromDriverRotation);
+
+
+			//---------------------------------------------------计算出头显当前在世界坐标系下的位置和旋转
+
+			//将头显在硬件坐标系下的原始位置转换到世界坐标系下 (Driver Space -> App Space)
+			//分为两个部分
+			//1 旋转向量(位置)
+			//		想象你的定位基站是歪着挂在墙角的（向下倾斜 45 度）。
+			//		头显在你前方 1 米处。但在基站看来，头显是在它“上方” 1 米处。
+			//		这一步就是把这个“相对于基站的歪坐标”，旋转修正为“相对于地面的平坐标”。
+			//		结果：此时得到的坐标，方向已经和世界坐标一致了（比如 Y 轴垂直向上），但原点还在基站上。
+			//2 平移/位移
+			//		加上这个偏移量，把原点从驱动坐标转到世界坐标。
+			vr::HmdVector3d_t poseWorldPos = vrmath::quaternionRotateVector(
+				pose.qWorldFromDriverRotation,	//旋转
+				tmpConj,						//逆旋转
+				pose.vecPosition,				//头显在硬件坐标系下的原始位置
+				false) 
+				+ pose.vecWorldFromDriverTranslation//(平移/位移)  
+				;
+
+			// 将头显旋转从驱动坐标系转换到世界坐标系 (Driver Space -> App Space):  水平时 pitch 和 roll 角度为0   正对b通道探头时 yaw 角度为0
+			vr::HmdQuaternion_t poseWorldRot = pose.qWorldFromDriverRotation * pose.qRotation;
+
+
+			//---------------------------------------------------记录初始旋转和位移
+			vr::HmdVector3d_t headerQ =QuaternionToEulerOpenVR(poseWorldRot.w, poseWorldRot.x, poseWorldRot.y, poseWorldRot.z);
+			if (!_ZeroPoseValid)
+			{
+				_ZeroRotYaw = headerQ.v[2];
+				//重点: 这里假设开启补偿的时候头显的正前方表示运动平台的正前方.
+				//在openvr中,b传感器所在的方向才是正前方,所以把头显此时的yaw记录下载,作为初始旋转角度.
+				//平台的pitch和roll是绝对的, 只有yaw是相对的,所以ZeroRot仅记录yaw
+				_ZeroRot = vrmath::quaternionFromYawPitchRoll(_ZeroRotYaw,0,0);
+				_ZeroRotInv = vrmath::quaternionConjugate(_ZeroRot);
+
+
+				_ZeroPos = vrmath::quaternionRotateVector(_ZeroRot, _ZeroRotInv,{0,0,0}, false) + pose.vecWorldFromDriverTranslation;
+
+				_ZeroPoseValid = true;
+			}
+
+
+			try
+			{
+				updatePoseFromPlatform();
+			}
+			catch (std::exception& e)
+			{
+				LOG(ERROR) << "updatePoseFromPlatform error  " << e.what();
+			}
+
+			//---------------------------------------------------计算补偿
+			_RefLock.lock();
+
+			_ZeroLock.lock();
+			// 计算位移补偿
+			// 使用平台的位移数据时, _RefPos 本来就已经在世界中, 不需要再去反向旋转_RefRot  所以直接用减法计算即可
+			vr::HmdVector3d_t compensatedPoseWorldPos = poseWorldPos - _RefPos;
+			_ZeroLock.unlock();
+
+
+			//计算旋转补偿 
+			// 直接把座椅旋转的逆 (_RefRotInv) 乘到头显旋转上。这实现了“去耦合”。
+			vr::HmdQuaternion_t compensatedPoseWorldRot = _RefRotInv *  poseWorldRot;
+
+			_RefLock.unlock();
+
+			////////////////// Translate the motion ref Velocity / Acceleration values into driver space and directly subtract them
+			//////////////////处理速度和加速度:
+			////////////////if (_SetZeroMode)
+			////////////////{
+			////////////////	_zeroVec(pose.vecVelocity);
+			////////////////	_zeroVec(pose.vecAcceleration);
+			////////////////	_zeroVec(pose.vecAngularVelocity);
+			////////////////	_zeroVec(pose.vecAngularAcceleration);
+			////////////////}
+			////////////////else
+			////////////////{
+			////////////////	// Translate the motion ref Velocity / Acceleration values into driver space and directly subtract them
+			////////////////	_RefVelLock.lock();
+			////////////////	vr::HmdVector3d_t tmpPosVel = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefVel, true);
+			////////////////	// 直接减去参考追踪器的速度
+			////////////////	pose.vecVelocity[0] -= tmpPosVel.v[0];
+			////////////////	pose.vecVelocity[1] -= tmpPosVel.v[1];
+			////////////////	pose.vecVelocity[2] -= tmpPosVel.v[2];
+
+			////////////////	vr::HmdVector3d_t tmpRotVel = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefRotVel, true);
+			////////////////	pose.vecAngularVelocity[0] -= tmpRotVel.v[0];
+			////////////////	pose.vecAngularVelocity[1] -= tmpRotVel.v[1];
+			////////////////	pose.vecAngularVelocity[2] -= tmpRotVel.v[2];
+
+			////////////////	vr::HmdVector3d_t tmpPosAcc = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefAcc, true);
+			////////////////	pose.vecAcceleration[0] -= tmpPosAcc.v[0];
+			////////////////	pose.vecAcceleration[1] -= tmpPosAcc.v[1];
+			////////////////	pose.vecAcceleration[2] -= tmpPosAcc.v[2];
+
+			////////////////	vr::HmdVector3d_t tmpRotAcc = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, _RefRotAcc, true);
+			////////////////	pose.vecAngularAcceleration[0] -= tmpRotAcc.v[0];
+			////////////////	pose.vecAngularAcceleration[1] -= tmpRotAcc.v[1];
+			////////////////	pose.vecAngularAcceleration[2] -= tmpRotAcc.v[2];
+			////////////////	_RefVelLock.unlock();
+
+
+			////////////////	//这部分非常重要！
+			////////////////	//	如果只改位置不改速度，SteamVR 的预测算法会发疯，导致画面抖动。
+			////////////////	//	代码计算了参考追踪器（座椅）的速度，并将其转换到 Driver Space，然后直接从头显的速度中减去。
+			////////////////	//	结果 : 告诉 SteamVR “虽然我的传感器说我在动，但实际上我在虚拟世界里没动（或者动得没那么快）”。
+			////////////////}
+
+			//---------------------------------------------------应用补偿 : 这里直接修改了参数 pose 的成员变量。
+			//将世界坐标系下的补偿量 compensatedPoseWorldRot 转回到了驱动坐标系,并应用到pose中使其生效
+			pose.qRotation = tmpConj * compensatedPoseWorldRot;
+
+
+
+
+			// convert back to driver space
+			// 转换回驱动坐标系 (App Space -> Driver Space):
+			// SteamVR 只要 Driver Space 的数据，所以算完还得转回去。
+			vr::HmdVector3d_t adjPoseDriverPos = vrmath::quaternionRotateVector(
+				pose.qWorldFromDriverRotation, 
+				tmpConj, 
+				compensatedPoseWorldPos - pose.vecWorldFromDriverTranslation, 
+			true);
+			_copyVec(pose.vecPosition, adjPoseDriverPos.v);
+
+
+			//回传头显实时姿态
+			if (_PVR2H)
+			{
+				_PVR2H->DataIndex++;
+				//--------------
+				_PVR2H->HeaderRotw = poseWorldRot.w;
+				_PVR2H->HeaderRotx = poseWorldRot.x;
+				_PVR2H->HeaderRoty = poseWorldRot.y;
+				_PVR2H->HeaderRotz = poseWorldRot.z;
+
+				_PVR2H->HeaderPosX = poseWorldPos.v[0];
+				_PVR2H->HeaderPosY = poseWorldPos.v[1];
+				_PVR2H->HeaderPosZ = poseWorldPos.v[2];
+
+				//--------------
+
+				_PVR2H->ZeroRotW = _ZeroRot.w;
+				_PVR2H->ZeroRotX = _ZeroRot.x;
+				_PVR2H->ZeroRotY = _ZeroRot.y;
+				_PVR2H->ZeroRotZ = _ZeroRot.z;
+
+				_PVR2H->ZeroPosX = _ZeroPos.v[0];
+				_PVR2H->ZeroPosY = _ZeroPos.v[1];
+				_PVR2H->ZeroPosZ = _ZeroPos.v[2];
+
+				//--------------
+
+				_PVR2H->TrackerRotW = _trackWorldRot.w;
+				_PVR2H->TrackerRotX = _trackWorldRot.x;
+				_PVR2H->TrackerRotY = _trackWorldRot.y;
+				_PVR2H->TrackerRotZ = _trackWorldRot.z;
+
+
+				//--------------
+
+				_PVR2H->RefRotQw = _RefRot.w;
+				_PVR2H->RefRotQx = _RefRot.x;
+				_PVR2H->RefRotQy = _RefRot.y;
+				_PVR2H->RefRotQz = _RefRot.z;
+
+				_PVR2H->RefPosX = _RefPos.v[0];
+				_PVR2H->RefPosY = _RefPos.v[1];
+				_PVR2H->RefPosZ = _RefPos.v[2];
+
+				//--------------
+				_PVR2H->UncompensatedPosX = pose.vecPosition[0];
+				_PVR2H->UncompensatedPosY = pose.vecPosition[1];
+				_PVR2H->UncompensatedPosZ = pose.vecPosition[2];
+
+				_PVR2H->CompensatedPoseWorldPosX = compensatedPoseWorldPos.v[0];
+				_PVR2H->CompensatedPoseWorldPosY = compensatedPoseWorldPos.v[1];
+				_PVR2H->CompensatedPoseWorldPosZ = compensatedPoseWorldPos.v[2];
+
+				_PVR2H->CompensatedPosX = adjPoseDriverPos.v[0];
+				_PVR2H->CompensatedPosY = adjPoseDriverPos.v[1];
+				_PVR2H->CompensatedPosZ = adjPoseDriverPos.v[2];
+
+			}
 
 			return true;
 		}
@@ -639,10 +352,10 @@ namespace vrmotioncompensation
 			MMFstruct_H2VR localData = *_PH2VR;
 
 			// 数据无效
-			if (localData.dataIndex <= 0) return;
+			if (localData.DataIndex <= 0) return;
 
 			// 计算 Index 差值
-			long long indexDiff = (long long)localData.dataIndex - _lastDataIndex;
+			long long indexDiff = (long long)localData.DataIndex - _lastDataIndex;
 
 			// 1. 如果 indexDiff == 0: 数据没变，维持上一帧状态，直接返回
 			if (indexDiff == 0 && _lastDataIndex != 0)
@@ -652,12 +365,18 @@ namespace vrmotioncompensation
 			}
 
 			//传过来的原始数据调整方向
-			double pitch =  localData.Rotation.v[0];//角度
-			double roll  = -localData.Rotation.v[1];//角度
-			double yaw   =  localData.Rotation.v[2];//角度
-			double Sway  =  localData.Translation.v[0]	/ 1000;//米
-			double Heave =  localData.Translation.v[1]	/ 1000;//米
-			double Surge = -localData.Translation.v[2]	/ 1000;//米
+			double roll  = -localData.Rotation.v[0];			//角度
+			double pitch = -localData.Rotation.v[1];			//角度
+			double yaw   =  localData.Rotation.v[2];			//角度
+			double surge =  localData.Translation.v[0]	/ 1000;	//毫米->米
+			double sway  =  localData.Translation.v[1]	/ 1000;	//毫米->米
+			double heave =  localData.Translation.v[2]	/ 1000;	//毫米->米
+
+			double eyeTx =  localData.EyePos.v[1] / 1000;		//毫米->米 vr中 X轴指向右方
+			double eyeTy =  localData.EyePos.v[2] / 1000;		//毫米->米 vr中 Y轴指向上方
+			double eyeTz =  localData.EyePos.v[0] / 1000;		//毫米->米 vr中 Z轴指向前方
+
+
 
 			//-------------------------------------------------------计算相对旋转
 			//将旋转值转为4元数形式
@@ -678,11 +397,18 @@ namespace vrmotioncompensation
 			_RefLock.unlock();
 
 			//-------------------------------------------------------计算相对位移
-			vr::HmdVector3d_t motionPos = { Sway ,Heave ,Surge };
+			//平台自身的平移量
+			vr::HmdVector3d_t motionPos = { sway ,heave ,surge };
+
+			//因旋转造成的眼点平移
+			vr::HmdVector3d_t eyePos = { eyeTx ,eyeTy ,eyeTz };
+			vr::HmdVector3d_t eyeTranslationByRotation = GetEyeWorldPosition(roll, pitch, yaw, eyePos);
+
+			//总偏移量
+			vr::HmdVector3d_t totalTranslation = motionPos + eyeTranslationByRotation;
 
 			_RefLock.lock();
-			//_RefPos = vrmath::quaternionRotateVector(pose.qWorldFromDriverRotation, tmpConj, Filter_vecPosition, false) + pose.vecWorldFromDriverTranslation;
-			_RefPos = vrmath::quaternionRotateVector(_ZeroRot, _ZeroRotInv, motionPos, false);
+			_RefPos = vrmath::quaternionRotateVector(_ZeroRot, _ZeroRotInv, totalTranslation, false);
 			_RefLock.unlock();
 
 
@@ -848,7 +574,7 @@ namespace vrmotioncompensation
 
 			////////////////}
 			////////////////_PlatformPoseIndex++;
-			_lastDataIndex = localData.dataIndex;
+			_lastDataIndex = localData.DataIndex;
 		}
 
 		void MotionCompensationManager::runFrame()
@@ -1266,14 +992,14 @@ namespace vrmotioncompensation
 
 
 
-	/**
-	 * @brief 旋转向量投影 (ProjectRotationVector)
-	 * 将 pos_original 的旋转值视为矢量，投影到 RRP 坐标系下。
-	 *
-	 * @param pos_original 原始姿态及位置 [rx, ry, rz, x, y, z] (角度/或弧度都可以)
-	 * @param rrp 参考坐标系姿态及位置 [rx, ry, rz, x, y, z] (角度)
-	 * @return std::vector<float> 投影后的分量 [rx', ry', rz', x, y, z]
-	 */
+		/**
+		 * @brief 旋转向量投影 (ProjectRotationVector)
+		 * 将 pos_original 的旋转值视为矢量，投影到 RRP 坐标系下。
+		 *
+		 * @param pos_original 原始姿态及位置 [rx, ry, rz, x, y, z] (角度/或弧度都可以)
+		 * @param rrp 参考坐标系姿态及位置 [rx, ry, rz, x, y, z] (角度)
+		 * @return std::vector<float> 投影后的分量 [rx', ry', rz', x, y, z]
+		 */
 		std::vector<float>MotionCompensationManager::ProjectRotationVector(const std::vector<float>& pos_original, const std::vector<float>& rrp)
 		{
 			// 创建返回结果，大小为6
@@ -1334,6 +1060,69 @@ namespace vrmotioncompensation
 			result[5] = pos_original[5];
 
 			return result;
+		}
+
+
+
+
+		/// <summary>
+		/// 计算眼睛在世界坐标系中的位置 (C++ 版 - 使用 HmdVector3d_t)
+		/// </summary>
+		/// <param name="rx">绕X轴旋转角度 (度) -> 对应 C# 传入的 Roll</param>
+		/// <param name="ry">绕Y轴旋转角度 (度) -> 对应 C# 传入的 Pitch</param>
+		/// <param name="rz">绕Z轴旋转角度 (度) -> 对应 C# 传入的 Yaw</param>
+		/// <param name="eyePos">眼睛相对于平台中心的初始位置</param>
+		/// <param name="platformPos">平台中心在世界坐标系中的平移位置</param>
+		/// <returns>计算后的世界坐标</returns>
+		vr::HmdVector3d_t MotionCompensationManager::GetEyeWorldPosition(double roll, double pitch, double yaw, vr::HmdVector3d_t eyePos)
+		{
+			// 1. 将角度转换为弧度
+			// 根据 C# 代码逻辑: Matrix4x4.CreateFromYawPitchRoll(radZ, radY, radX)
+			// 参数1 (Yaw/Y轴) = rz
+			// 参数2 (Pitch/X轴) = ry
+			// 参数3 (Roll/Z轴) = rx
+			double radYaw = yaw * DegToRad;
+			double radPitch = pitch * DegToRad;
+			double radRoll = roll * DegToRad;
+
+			// 2. 预计算三角函数
+			double cYaw = std::cos(radYaw);
+			double sYaw = std::sin(radYaw);
+
+			double cPtch = std::cos(radPitch);
+			double sPtch = std::sin(radPitch);
+
+			double cRoll = std::cos(radRoll);
+			double sRoll = std::sin(radRoll);
+
+			// 3. 构建旋转矩阵元素 (展开 Matrix4x4.CreateFromYawPitchRoll 公式)
+			// 旋转顺序: Roll(Z) -> Pitch(X) -> Yaw(Y)
+
+			// X轴基向量 (M11, M12, M13)
+			double m11 = cYaw * cRoll + sYaw * sPtch * sRoll;
+			double m12 = cPtch * sRoll;
+			double m13 = -sYaw * cRoll + cYaw * sPtch * sRoll;
+
+			// Y轴基向量 (M21, M22, M23)
+			double m21 = -cYaw * sRoll + sYaw * sPtch * cRoll;
+			double m22 = cPtch * cRoll;
+			double m23 = sYaw * sRoll + cYaw * sPtch * cRoll;
+
+			// Z轴基向量 (M31, M32, M33)
+			double m31 = sYaw * cPtch;
+			double m32 = -sPtch;
+			double m33 = cYaw * cPtch;
+
+			// 4. 执行旋转变换 (Vector3.Transform 逻辑)
+			// v' = v.x * X_Axis + v.y * Y_Axis + v.z * Z_Axis
+			vr::HmdVector3d_t finalPos;
+
+
+			finalPos.v[0] = eyePos.v[0] * m11 + eyePos.v[1] * m21 + eyePos.v[2] * m31;
+			finalPos.v[1] = eyePos.v[0] * m12 + eyePos.v[1] * m22 + eyePos.v[2] * m32;
+			finalPos.v[2] = eyePos.v[0] * m13 + eyePos.v[1] * m23 + eyePos.v[2] * m33;
+
+			return finalPos;
 		}
 	}
 }
