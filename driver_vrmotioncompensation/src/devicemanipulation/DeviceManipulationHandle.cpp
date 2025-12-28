@@ -21,6 +21,7 @@ namespace vrmotioncompensation
 		{
 		}
 
+		//看起来没有被调用
 		void DeviceManipulationHandle::setValid(bool isValid)
 		{
 			m_isValid = isValid;
