@@ -25,7 +25,7 @@ namespace vrmotioncompensation
 
 		ServerDriver::~ServerDriver()
 		{
-			LOG(INFO) << "driver::~ServerDriver()";
+			LOG(TRACE) << "driver::~ServerDriver()";
 			singleton = nullptr;
 		}
 
@@ -114,7 +114,7 @@ namespace vrmotioncompensation
 		void ServerDriver::hooksTrackedDeviceAdded(void* serverDriverHost, int version,
 			const char* pchDeviceSerialNumber, vr::ETrackedDeviceClass eDeviceClass, void* pDriver)
 		{
-			LOG(INFO) << "hooksTrackedDeviceAdded: " << (pchDeviceSerialNumber ? pchDeviceSerialNumber : "null")
+			LOG(TRACE) << "hooksTrackedDeviceAdded: " << (pchDeviceSerialNumber ? pchDeviceSerialNumber : "null")
 				<< " (class: " << (int)eDeviceClass << ")";
 
 			if (!pDriver || !pchDeviceSerialNumber || pchDeviceSerialNumber[0] == '\0')
@@ -241,7 +241,7 @@ namespace vrmotioncompensation
 		// === CLEANUP ===
 		void ServerDriver::Cleanup()
 		{
-			LOG(INFO) << "ServerDriver::Cleanup()";
+			LOG(TRACE) << "ServerDriver::Cleanup()";
 
 			shmCommunicator.shutdown();
 

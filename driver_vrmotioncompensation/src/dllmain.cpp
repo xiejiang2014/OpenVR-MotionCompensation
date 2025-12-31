@@ -39,7 +39,7 @@ BOOL APIENTRY DllMain(HMODULE hModule,
 		init_logging();
 		LOG(INFO) << "|========================================================================================|";
 		LOG(INFO) << "VRMotionCompensation dll loaded...";
-		LOG(INFO) << "Trace messages enabled.";
+		LOG(TRACE) << "Trace messages enabled.";
 		LOG(DEBUG) << "Debug messages enabled.";
 		break;
 	case DLL_THREAD_ATTACH:

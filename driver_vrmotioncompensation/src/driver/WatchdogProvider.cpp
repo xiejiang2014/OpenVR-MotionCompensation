@@ -10,14 +10,14 @@ namespace vrmotioncompensation
 	{
 		vr::EVRInitError WatchdogProvider::Init(vr::IVRDriverContext* pDriverContext)
 		{
-			LOG(INFO) << "WatchdogProvider::Init()";
+			LOG(TRACE) << "WatchdogProvider::Init()";
 			VR_INIT_WATCHDOG_DRIVER_CONTEXT(pDriverContext);
 			return vr::VRInitError_None;
 		}
 
 		void WatchdogProvider::Cleanup()
 		{
-			LOG(INFO) << "WatchdogProvider::Cleanup()";
+			LOG(TRACE) << "WatchdogProvider::Cleanup()";
 			VR_CLEANUP_WATCHDOG_DRIVER_CONTEXT();
 		}
 	}

@@ -11,7 +11,7 @@ namespace vrmotioncompensation
 
 		ITrackedDeviceServerDriver005Hooks::ITrackedDeviceServerDriver005Hooks(void* iptr)
 		{
-			LOG(INFO) << "ITrackedDeviceServerDriver005Hooks::ctr(" << iptr << ")";
+			LOG(TRACE) << "ITrackedDeviceServerDriver005Hooks::ctr(" << iptr << ")";
 			auto vtable = (*((void***)iptr));
 			activateAddress = vtable[0];
 			auto it = _hookedActivateAdressMap.find(activateAddress);
@@ -53,7 +53,7 @@ namespace vrmotioncompensation
 
 		vr::EVRInitError ITrackedDeviceServerDriver005Hooks::_activate(void* _this, uint32_t unObjectId)
 		{
-			LOG(INFO) << "ITrackedDeviceServerDriver005Hooks::_activate(" << _this << ", " << unObjectId << ")";
+			LOG(TRACE) << "ITrackedDeviceServerDriver005Hooks::_activate(" << _this << ", " << unObjectId << ")";
 			auto vtable = (*((void***)_this));
 			auto activateAddress = vtable[0];
 			auto it = _hookedActivateAdressMap.find(activateAddress);

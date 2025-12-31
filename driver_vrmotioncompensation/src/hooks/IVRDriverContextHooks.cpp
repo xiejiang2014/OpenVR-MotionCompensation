@@ -53,7 +53,7 @@ namespace vrmotioncompensation
 					_hookedInterfaces.insert({ std::string(pchInterfaceVersion), hooks });
 				}
 			}
-			LOG(INFO) << "IVRDriverContextHooks::_getGenericInterface(" << _this << ", " << pchInterfaceVersion << ") = " << retval;
+			LOG(TRACE) << "IVRDriverContextHooks::_getGenericInterface(" << _this << ", " << pchInterfaceVersion << ") = " << retval;
 			return retval;
 		}
 	}
