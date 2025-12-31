@@ -44,7 +44,7 @@ namespace vrmotioncompensation
 
 		bool IVRServerDriverHost006Hooks::_trackedDeviceAdded(void* _this, const char* pchDeviceSerialNumber, vr::ETrackedDeviceClass eDeviceClass, void* pDriver)
 		{
-			LOG(TRACE) << "IVRServerDriverHost006Hooks::_trackedDeviceAdded(" << _this << ", " << pchDeviceSerialNumber << ", " << eDeviceClass << ", " << pDriver << ")";
+			LOG(INFO) << "IVRServerDriverHost006Hooks::_trackedDeviceAdded(" << _this << ", " << pchDeviceSerialNumber << ", " << eDeviceClass << ", " << pDriver << ")";
 			
 			serverDriver->hooksTrackedDeviceAdded(_this, 6, pchDeviceSerialNumber, eDeviceClass, pDriver);
 			

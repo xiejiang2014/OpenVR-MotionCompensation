@@ -53,7 +53,7 @@ namespace vrmotioncompensation
 						boost::posix_time::ptime timeout = boost::posix_time::microsec_clock::universal_time() + boost::posix_time::milliseconds(50);
 						if (messageQueue.timed_receive(&message, sizeof(ipc::Request), recv_size, priority, timeout))
 						{
-							LOG(TRACE) << "CServerDriver::_ipcThreadFunc: IPC request received ( type " << (int)message.type << ")";
+							LOG(INFO) << "CServerDriver::_ipcThreadFunc: IPC request received ( type " << (int)message.type << ")";
 							if (recv_size == sizeof(ipc::Request))
 							{
 								switch (message.type)
@@ -116,7 +116,7 @@ namespace vrmotioncompensation
 
 								case ipc::RequestType::IPC_Ping:
 								{
-									LOG(TRACE) << "Ping received: clientId " << message.msg.ipc_Ping.clientId << ", nonce " << message.msg.ipc_Ping.nonce;
+									LOG(INFO) << "Ping received: clientId " << message.msg.ipc_Ping.clientId << ", nonce " << message.msg.ipc_Ping.nonce;
 									ipc::Reply reply(ipc::ReplyType::IPC_Ping);
 									reply.messageId = message.msg.ipc_Ping.messageId;
 									reply.status = ipc::ReplyStatus::Ok;

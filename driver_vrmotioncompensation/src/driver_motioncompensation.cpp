@@ -11,7 +11,7 @@ vrmotioncompensation::driver::WatchdogProvider watchdogProvider;
 
 HMD_DLL_EXPORT void* HmdDriverFactory(const char* pInterfaceName, int* pReturnCode)
 {
-	LOG(TRACE) << "HmdDriverFactory( " << pInterfaceName << " )";
+	LOG(INFO) << "HmdDriverFactory( " << pInterfaceName << " )";
 	if (std::strcmp(vr::IServerTrackedDeviceProvider_Version, pInterfaceName) == 0)
 	{
 		return &serverDriver;
