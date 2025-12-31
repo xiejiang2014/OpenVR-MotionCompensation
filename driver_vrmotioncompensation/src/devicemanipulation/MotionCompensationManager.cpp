@@ -1,4 +1,4 @@
-#include "MotionCompensationManager.h"
+﻿#include "MotionCompensationManager.h"
 
 #include "DeviceManipulationHandle.h"
 #include "../driver/ServerDriver.h"

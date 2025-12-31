@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <openvr_driver.h>
 #include <vrmotioncompensation_types.h>

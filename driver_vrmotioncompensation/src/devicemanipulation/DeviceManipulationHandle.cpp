@@ -1,4 +1,4 @@
-#include "DeviceManipulationHandle.h"
+﻿#include "DeviceManipulationHandle.h"
 
 #include "../driver/ServerDriver.h"
 #include "../hooks/IVRServerDriverHost004Hooks.h"
@@ -17,12 +17,19 @@ namespace vrmotioncompensation
 	namespace driver
 	{
 		DeviceManipulationHandle::DeviceManipulationHandle(const char* serial, vr::ETrackedDeviceClass eDeviceClass)
-			: m_isValid(true), m_parent(ServerDriver::getInstance()), m_motionCompensationManager(m_parent->motionCompensation()), m_eDeviceClass(eDeviceClass), m_serialNumber(serial)
+			: m_isValid(true), 
+			m_parent(ServerDriver::getInstance()), 
+			m_motionCompensationManager(m_parent->motionCompensation()), 
+			m_eDeviceClass(eDeviceClass), 
+			m_serialNumber(serial)
 		{
+			LOG(INFO) << "DeviceManipulationHandle 被构造. eDeviceClass:" << eDeviceClass << "  serial:"<< serial;
 		}
 
 		void DeviceManipulationHandle::setValid(bool isValid)
 		{
+
+			LOG(INFO) << "DeviceManipulationHandle setValid 被设置. eDeviceClass:" << m_eDeviceClass << "  serial:" << m_serialNumber << "  isValid:" << isValid;
 			m_isValid = isValid;
 		}
 
@@ -51,7 +58,6 @@ namespace vrmotioncompensation
 			}
 			else if (m_deviceMode == MotionCompensationDeviceMode::MotionCompensated) //运动补偿
 			{
-
 				//LOG(INFO) << "handlePoseUpdate() m_deviceMode= MotionCompensated";
 
 				//Check if the pose is valid to prevent unwanted jitter and movement

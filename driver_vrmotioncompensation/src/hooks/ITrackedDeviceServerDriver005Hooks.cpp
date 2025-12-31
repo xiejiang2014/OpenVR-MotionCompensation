@@ -1,4 +1,4 @@
-#include "ITrackedDeviceServerDriver005Hooks.h"
+﻿#include "ITrackedDeviceServerDriver005Hooks.h"
 
 #include "../driver/ServerDriver.h"
 
@@ -14,14 +14,17 @@ namespace vrmotioncompensation
 			LOG(TRACE) << "ITrackedDeviceServerDriver005Hooks::ctr(" << iptr << ")";
 			auto vtable = (*((void***)iptr));
 			activateAddress = vtable[0];
+
+			//查表：检查这个函数地址以前是否被 Hook 过.
 			auto it = _hookedActivateAdressMap.find(activateAddress);
-			if (it == _hookedActivateAdressMap.end())
+			if (it == _hookedActivateAdressMap.end())// 没 Hook 过
 			{
+				//Hook 硬件启动过程，捕获分配到的 设备 ID
 				CREATE_MH_HOOK(activateHook, _activate, "ITrackedDeviceServerDriver005::Activate", iptr, 0);
 				_hookedActivateAdressMap[activateAddress].useCount = 1;
 				_hookedActivateAdressMap[activateAddress].hookData = activateHook;
 			}
-			else
+			else// 已经 Hook 过了
 			{
 				activateHook = it->second.hookData;
 				it->second.useCount += 1;

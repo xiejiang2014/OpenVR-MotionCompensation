@@ -1,4 +1,4 @@
-#include "driver_ipc_shm.h"
+﻿#include "driver_ipc_shm.h"
 
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <openvr_driver.h>
@@ -34,7 +34,7 @@ namespace vrmotioncompensation
 		void IpcShmCommunicator::_ipcThreadFunc(IpcShmCommunicator* _this, ServerDriver* driver)
 		{
 			_this->_ipcThreadRunning = true;
-			LOG(INFO) << "Ipc 通讯线程启动";
+			LOG(INFO) << "Ipc 通讯线程启动 ";
 			try
 			{
 				// Create message queue
@@ -168,10 +168,10 @@ namespace vrmotioncompensation
 									}*/
 
 
-									LOG(INFO) << "Ipc 回复  status:"<< resp.status 
+									LOG(INFO) << "Ipc 回复  status:"<< (uint32_t)resp.status
 										<<"  deviceClass:" << resp.msg.dm_deviceInfo.deviceClass 
 										<<"  OpenVRId:" << resp.msg.dm_deviceInfo.OpenVRId
-										<<"  deviceMode:" << resp.msg.dm_deviceInfo.deviceMode
+										<<"  deviceMode:" << (uint32_t)resp.msg.dm_deviceInfo.deviceMode
 										;
 
 									if (resp.messageId != 0)
@@ -195,7 +195,7 @@ namespace vrmotioncompensation
 										resp.status = ipc::ReplyStatus::InvalidId;
 
 
-										LOG(INFO) << "DeviceManipulation_MotionCompensationMode 无效";
+										LOG(INFO) << "DeviceManipulation_MotionCompensationMode 无效 ";
 									}
 									else
 									{
@@ -223,14 +223,14 @@ namespace vrmotioncompensation
 											{
 												if (message.msg.dm_MotionCompensationMode.CompensationMode == MotionCompensationMode::ReferenceTracker)
 												{
-													LOG(INFO) << "准备启用补偿";
+													LOG(INFO) << "准备启用补偿 ";
 													LOG(INFO) << "追踪器 Id: " << message.msg.dm_MotionCompensationMode.RTdeviceId;
 													LOG(INFO) << "头显   ID: " << message.msg.dm_MotionCompensationMode.MCdeviceId;
 
 													// Check if an old device needs a mode change
 													if (serverDriver->motionCompensation().getMotionCompensationMode() == MotionCompensationMode::ReferenceTracker)
 													{
-														LOG(INFO) << "补偿已是开启的,处理设备变更.";
+														LOG(INFO) << "补偿已是开启的,处理设备变更. ";
 
 														// New MCdevice is different from old
 														//如果系统已经在运行补偿模式了，我们需要小心处理“旧人”和“新人”的交接。
@@ -274,13 +274,13 @@ namespace vrmotioncompensation
 
 														// Set motion compensation mode
 														// 告诉核心算法开始工作
-														LOG(INFO) << "告诉核心算法开始工作";
+														LOG(INFO) << "告诉核心算法开始工作 ";
 														serverDriver->motionCompensation().setMotionCompensationMode(MotionCompensationMode::ReferenceTracker, MCdeviceID, RTdeviceID);
 													}
 												}
 												else if (message.msg.dm_MotionCompensationMode.CompensationMode == MotionCompensationMode::Disabled) //禁用补偿
 												{
-													LOG(INFO) << "禁用补偿";
+													LOG(INFO) << "禁用补偿 ";
 
 													MCdevice->setMotionCompensationDeviceMode(MotionCompensationDeviceMode::Default);
 													RTdevice->setMotionCompensationDeviceMode(MotionCompensationDeviceMode::Default);
@@ -489,7 +489,7 @@ namespace vrmotioncompensation
 			}
 
 			_this->_ipcThreadRunning = false;
-			LOG(DEBUG) << "IPC收信线程停止";
+			LOG(DEBUG) << "IPC收信线程停止 ";
 		}
 
 		void IpcShmCommunicator::sendReply(uint32_t clientId, const ipc::Reply& reply)

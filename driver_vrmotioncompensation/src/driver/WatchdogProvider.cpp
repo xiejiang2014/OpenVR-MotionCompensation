@@ -1,4 +1,4 @@
-#include "WatchdogProvider.h"
+﻿#include "WatchdogProvider.h"
 
 #include "../logging.h"
 

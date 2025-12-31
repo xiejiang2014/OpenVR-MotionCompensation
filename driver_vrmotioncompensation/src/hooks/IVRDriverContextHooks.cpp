@@ -1,4 +1,4 @@
-#include "IVRDriverContextHooks.h"
+﻿#include "IVRDriverContextHooks.h"
 
 
 namespace vrmotioncompensation
@@ -47,6 +47,8 @@ namespace vrmotioncompensation
 			auto retval = getGenericInterfaceHook.origFunc(_this, pchInterfaceVersion, peError);
 			if (_hookedInterfaces.find(pchInterfaceVersion) == _hookedInterfaces.end())
 			{
+				LOG(INFO) << "IVRDriverContextHooks::_getGenericInterface 中创建钩子对象: " << pchInterfaceVersion;
+
 				auto hooks = InterfaceHooks::hookInterface(retval, pchInterfaceVersion);
 				if (hooks != nullptr)
 				{
