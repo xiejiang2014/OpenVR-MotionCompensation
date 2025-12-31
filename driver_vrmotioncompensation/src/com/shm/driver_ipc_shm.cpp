@@ -14,6 +14,8 @@ namespace vrmotioncompensation
 	{
 		void IpcShmCommunicator::init(ServerDriver* driver)
 		{
+			LOG(INFO) << "Ipc 通讯模块初始化...";
+
 			_driver = driver;
 			_ipcThreadStopFlag = false;
 			_ipcThread = std::thread(_ipcThreadFunc, this, driver);
@@ -21,6 +23,7 @@ namespace vrmotioncompensation
 
 		void IpcShmCommunicator::shutdown()
 		{
+			LOG(INFO) << "Ipc 通讯模块卸载...";
 			if (_ipcThreadRunning)
 			{
 				_ipcThreadStopFlag = true;
@@ -31,10 +34,10 @@ namespace vrmotioncompensation
 		void IpcShmCommunicator::_ipcThreadFunc(IpcShmCommunicator* _this, ServerDriver* driver)
 		{
 			_this->_ipcThreadRunning = true;
-			LOG(INFO) << "CServerDriver::_ipcThreadFunc: thread started";
+			LOG(INFO) << "Ipc 通讯线程启动";
 			try
 			{
-		   // Create message queue
+				// Create message queue
 				boost::interprocess::message_queue::remove(_this->_ipcQueueName.c_str());
 				boost::interprocess::message_queue messageQueue(
 					boost::interprocess::create_only,
@@ -54,6 +57,7 @@ namespace vrmotioncompensation
 						if (messageQueue.timed_receive(&message, sizeof(ipc::Request), recv_size, priority, timeout))
 						{
 							LOG(TRACE) << "CServerDriver::_ipcThreadFunc: IPC request received ( type " << (int)message.type << ")";
+
 							if (recv_size == sizeof(ipc::Request))
 							{
 								switch (message.type)
@@ -61,6 +65,8 @@ namespace vrmotioncompensation
 
 								case ipc::RequestType::IPC_ClientConnect://IPC客户端连接
 								{
+									LOG(INFO) << "Ipc 收信 RequestType::IPC_ClientConnect";
+
 									try
 									{
 										auto queue = std::make_shared<boost::interprocess::message_queue>(boost::interprocess::open_only, message.msg.ipc_ClientConnect.queueName);
@@ -85,7 +91,7 @@ namespace vrmotioncompensation
 										}
 										_this->sendReply(clientId, reply);
 									}
-									catch (std::exception & e)
+									catch (std::exception& e)
 									{
 										LOG(ERROR) << "Error during client connect: " << e.what();
 									}
@@ -94,6 +100,8 @@ namespace vrmotioncompensation
 
 								case ipc::RequestType::IPC_ClientDisconnect://IPC客户端断开连接
 								{
+									LOG(INFO) << "Ipc 收信 RequestType::IPC_ClientDisconnect";
+
 									ipc::Reply reply(ipc::ReplyType::GenericReply);
 									reply.messageId = message.msg.ipc_ClientDisconnect.messageId;
 									auto i = _this->_ipcEndpoints.find(message.msg.ipc_ClientDisconnect.clientId);
@@ -116,7 +124,7 @@ namespace vrmotioncompensation
 
 								case ipc::RequestType::IPC_Ping:
 								{
-									LOG(TRACE) << "Ping received: clientId " << message.msg.ipc_Ping.clientId << ", nonce " << message.msg.ipc_Ping.nonce;
+									LOG(INFO) << "Ipc 收信 RequestType::IPC_Ping  clientId " << message.msg.ipc_Ping.clientId << ", nonce " << message.msg.ipc_Ping.nonce;
 									ipc::Reply reply(ipc::ReplyType::IPC_Ping);
 									reply.messageId = message.msg.ipc_Ping.messageId;
 									reply.status = ipc::ReplyStatus::Ok;
@@ -127,6 +135,8 @@ namespace vrmotioncompensation
 
 								case ipc::RequestType::DeviceManipulation_GetDeviceInfo://设备操作_获取设备信息
 								{
+									LOG(INFO) << "Ipc 收信 RequestType::DeviceManipulation_GetDeviceInfo";
+
 									ipc::Reply resp(ipc::ReplyType::GenericReply);
 									resp.messageId = message.msg.ovr_GenericDeviceIdMessage.messageId;
 
@@ -157,6 +167,13 @@ namespace vrmotioncompensation
 										LOG(ERROR) << "Error while getting device info: Error code " << (int)resp.status;
 									}*/
 
+
+									LOG(INFO) << "Ipc 回复  status:"<< resp.status 
+										<<"  deviceClass:" << resp.msg.dm_deviceInfo.deviceClass 
+										<<"  OpenVRId:" << resp.msg.dm_deviceInfo.OpenVRId
+										<<"  deviceMode:" << resp.msg.dm_deviceInfo.deviceMode
+										;
+
 									if (resp.messageId != 0)
 									{
 										_this->sendReply(message.msg.ovr_GenericDeviceIdMessage.clientId, resp);
@@ -166,6 +183,8 @@ namespace vrmotioncompensation
 
 								case ipc::RequestType::DeviceManipulation_MotionCompensationMode://设备操作_运动补偿模式
 								{
+									LOG(INFO) << "Ipc 收信 RequestType::DeviceManipulation_MotionCompensationMode";
+
 									// Create reply message
 									ipc::Reply resp(ipc::ReplyType::GenericReply);
 									resp.messageId = message.msg.dm_MotionCompensationMode.messageId;
@@ -174,6 +193,9 @@ namespace vrmotioncompensation
 										(message.msg.dm_MotionCompensationMode.RTdeviceId > vr::k_unMaxTrackedDeviceCount && message.msg.dm_MotionCompensationMode.CompensationMode == MotionCompensationMode::ReferenceTracker))
 									{
 										resp.status = ipc::ReplyStatus::InvalidId;
+
+
+										LOG(INFO) << "DeviceManipulation_MotionCompensationMode 无效";
 									}
 									else
 									{
@@ -201,13 +223,15 @@ namespace vrmotioncompensation
 											{
 												if (message.msg.dm_MotionCompensationMode.CompensationMode == MotionCompensationMode::ReferenceTracker)
 												{
-													LOG(INFO) << "Setting driver into motion compensation mode";
-													LOG(INFO) << "Tracker OpenVR Id: " << message.msg.dm_MotionCompensationMode.RTdeviceId;
-													LOG(INFO) << "HMD OpenVR Id: " << message.msg.dm_MotionCompensationMode.MCdeviceId;
+													LOG(INFO) << "准备启用补偿";
+													LOG(INFO) << "追踪器 Id: " << message.msg.dm_MotionCompensationMode.RTdeviceId;
+													LOG(INFO) << "头显   ID: " << message.msg.dm_MotionCompensationMode.MCdeviceId;
 
 													// Check if an old device needs a mode change
 													if (serverDriver->motionCompensation().getMotionCompensationMode() == MotionCompensationMode::ReferenceTracker)
 													{
+														LOG(INFO) << "补偿已是开启的,处理设备变更.";
+
 														// New MCdevice is different from old
 														//如果系统已经在运行补偿模式了，我们需要小心处理“旧人”和“新人”的交接。
 														if (serverDriver->motionCompensation().getMCdeviceID() != MCdeviceID)
@@ -250,12 +274,13 @@ namespace vrmotioncompensation
 
 														// Set motion compensation mode
 														// 告诉核心算法开始工作
+														LOG(INFO) << "告诉核心算法开始工作";
 														serverDriver->motionCompensation().setMotionCompensationMode(MotionCompensationMode::ReferenceTracker, MCdeviceID, RTdeviceID);
 													}
 												}
 												else if (message.msg.dm_MotionCompensationMode.CompensationMode == MotionCompensationMode::Disabled) //禁用补偿
 												{
-													LOG(INFO) << "Setting driver into default mode";
+													LOG(INFO) << "禁用补偿";
 
 													MCdevice->setMotionCompensationDeviceMode(MotionCompensationDeviceMode::Default);
 													RTdevice->setMotionCompensationDeviceMode(MotionCompensationDeviceMode::Default);
@@ -288,6 +313,10 @@ namespace vrmotioncompensation
 
 								case ipc::RequestType::DeviceManipulation_SetMotionCompensationProperties://设备操作设置运动补偿属性
 								{
+
+									LOG(INFO) << "Ipc 收信 RequestType::DeviceManipulation_SetMotionCompensationProperties";
+
+
 									ipc::Reply resp(ipc::ReplyType::GenericReply);
 									resp.messageId = message.msg.dm_SetMotionCompensationProperties.messageId;
 									auto serverDriver = ServerDriver::getInstance();
@@ -324,6 +353,9 @@ namespace vrmotioncompensation
 
 								case ipc::RequestType::DeviceManipulation_ResetRefZeroPose://设备操作_重置参考零位姿态
 								{
+
+									LOG(INFO) << "Ipc 收信 RequestType::DeviceManipulation_ResetRefZeroPose";
+
 									ipc::Reply resp(ipc::ReplyType::GenericReply);
 									resp.messageId = message.msg.dm_SetMotionCompensationProperties.messageId;
 									auto serverDriver = ServerDriver::getInstance();
@@ -354,7 +386,7 @@ namespace vrmotioncompensation
 
 								case ipc::RequestType::DeviceManipulation_SetOffsets: //设备操作设置偏移量
 								{
-									LOG(INFO) << "DeviceManipulation_SetOffsets"; //加一个日志,看看到底用到这里没有
+									LOG(INFO) << "Ipc 收信 RequestType::DeviceManipulation_SetOffsets";
 
 									ipc::Reply resp(ipc::ReplyType::GenericReply);
 									resp.messageId = message.msg.dm_SetOffsets.messageId;
@@ -384,6 +416,9 @@ namespace vrmotioncompensation
 
 								case ipc::RequestType::DebugLogger_Settings:
 								{
+									LOG(INFO) << "Ipc 收信 RequestType::DebugLogger_Settings";
+
+
 									ipc::Reply resp(ipc::ReplyType::GenericReply);
 									resp.messageId = message.msg.dl_Settings.messageId;
 									auto serverDriver = ServerDriver::getInstance();
@@ -429,7 +464,9 @@ namespace vrmotioncompensation
 								break;
 
 								default:
-									LOG(ERROR) << "Error in ipc server receive loop: Unknown message type (" << (int)message.type << ")";
+
+									LOG(ERROR) << "Ipc 收信 未知类型的消息 (" << (int)message.type << ")";
+
 									break;
 								}
 							}
@@ -439,19 +476,20 @@ namespace vrmotioncompensation
 							}
 						}
 					}
-					catch (std::exception & ex)
+					catch (std::exception& ex)
 					{
-						LOG(ERROR) << "Exception caught in ipc server receive loop: " << ex.what();
+						LOG(ERROR) << "IPC收信循环异常: " << ex.what();
 					}
 				}
 				boost::interprocess::message_queue::remove(_this->_ipcQueueName.c_str());
 			}
-			catch (std::exception & ex)
+			catch (std::exception& ex)
 			{
-				LOG(ERROR) << "Exception caught in ipc server thread: " << ex.what();
+				LOG(ERROR) << "IPC收信线程异常: " << ex.what();
 			}
+
 			_this->_ipcThreadRunning = false;
-			LOG(DEBUG) << "CServerDriver::_ipcThreadFunc: thread stopped";
+			LOG(DEBUG) << "IPC收信线程停止";
 		}
 
 		void IpcShmCommunicator::sendReply(uint32_t clientId, const ipc::Reply& reply)
