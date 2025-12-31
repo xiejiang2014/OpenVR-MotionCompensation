@@ -9,7 +9,7 @@ const char* logConfigDefault =
 "	ENABLED = true\n"
 "	TO_FILE = true\n"
 "	TO_STANDARD_OUTPUT = true\n"
-"	MAX_LOG_FILE_SIZE = 2097152 ## 2MB\n"
+"	MAX_LOG_FILE_SIZE = 104857600 ## 100MB\n"
 "* TRACE:\n"
 "	ENABLED = true\n"
 "* DEBUG:\n"
