@@ -132,6 +132,7 @@ namespace vrmotioncompensation
 		}
 
 		// === DEVICE ACTIVATED (gets OpenVR ID) ===
+		//实测此处并没有运行
 		void ServerDriver::hooksTrackedDeviceActivated(void* serverDriver, int version, uint32_t unObjectId)
 		{
 			LOG(INFO) << "ServerDriver::hooksTrackedDeviceActivated version:" 
@@ -232,7 +233,7 @@ namespace vrmotioncompensation
 			}
 
 
-			LOG(INFO) << "ServerDriver::hooksTrackedDeviceActivated 中创建钩子对象: IVRDriverContext ";
+			LOG(INFO) << "ServerDriver::Init 中创建钩子对象: IVRDriverContext ";
 
 			_driverContextHooks = InterfaceHooks::hookInterface(pDriverContext, "IVRDriverContext");
 			VR_INIT_SERVER_DRIVER_CONTEXT(pDriverContext);

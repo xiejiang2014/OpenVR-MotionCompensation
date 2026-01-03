@@ -133,7 +133,7 @@ namespace vrmotioncompensation
 								}
 								break;
 
-								case ipc::RequestType::DeviceManipulation_GetDeviceInfo://设备操作_获取设备信息
+								case ipc::RequestType::DeviceManipulation_GetDeviceInfo://设备操作_获取设备信息  实测持续收到此数据  log中有1w+次
 								{
 									LOG(INFO) << "Ipc 收信 RequestType::DeviceManipulation_GetDeviceInfo";
 
