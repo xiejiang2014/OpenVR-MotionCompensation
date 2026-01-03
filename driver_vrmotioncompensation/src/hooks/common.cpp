@@ -19,7 +19,7 @@ namespace vrmotioncompensation
 			std::shared_ptr<InterfaceHooks> retval;
 			if (interfaceVersion.compare("IVRDriverContext") == 0)
 			{
-				LOG(INFO) << "创建 IVRDriverContext 的钩子 ";							//实测创建了
+				LOG(INFO) << "创建 IVRDriverContext 的钩子 ";							//实测创建了1次
 				retval = IVRDriverContextHooks::createHooks(interfaceRef);
 			}
 			else if (interfaceVersion.compare("IVRServerDriverHost_004") == 0)
@@ -27,14 +27,14 @@ namespace vrmotioncompensation
 				LOG(INFO) << "创建 IVRServerDriverHost_004 的钩子 ";
 				retval = IVRServerDriverHost004Hooks::createHooks(interfaceRef);
 			}
-			else if (interfaceVersion.compare("IVRServerDriverHost_005") == 0)
+			else if (interfaceVersion.compare("IVRServerDriverHost_005") == 0)		//实测创建了1次  来自 IVRDriverContextHooks::_getGenericInterface
 			{
 				LOG(INFO) << "创建 IVRServerDriverHost_005 的钩子 ";
 				retval = IVRServerDriverHost005Hooks::createHooks(interfaceRef);
 			}
 			else if (interfaceVersion.compare("IVRServerDriverHost_006") == 0)
 			{
-				LOG(INFO) << "创建 IVRServerDriverHost_006 的钩子 ";					//实测创建了
+				LOG(INFO) << "创建 IVRServerDriverHost_006 的钩子 ";					//实测创建了1次
 				retval = IVRServerDriverHost006Hooks::createHooks(interfaceRef);
 			}
 			else if (interfaceVersion.compare("ITrackedDeviceServerDriver_005") == 0)
